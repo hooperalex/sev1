@@ -1,12 +1,14 @@
 # AI Team MVP
 
-**End-to-end AI development team that fixes bugs automatically**
+**Autonomous AI development team that fixes bugs automatically**
 
 ## What This Does
 
-Submit a GitHub issue → AI agents triage, analyze, code, test, and deploy the fix → Bug fixed in production
+The system **continuously monitors your GitHub repository** and automatically processes issues through a 12-stage AI pipeline:
 
-**Current Status:** Detective + Archaeologist agents working. Orchestrator running multi-agent pipeline. Building remaining 10 agents.
+Create GitHub issue → AI agents triage, analyze, code, review, test, and deploy → Bug fixed in production → PR created with full documentation
+
+**Current Status:** ✅ All 12 agents complete. Full pipeline operational. Automated issue monitoring active.
 
 ---
 
@@ -17,6 +19,7 @@ Submit a GitHub issue → AI agents triage, analyze, code, test, and deploy the 
 ```bash
 cd ai-team-mvp
 npm install
+npm run build
 ```
 
 ### 2. Configure Environment
@@ -26,20 +29,26 @@ npm install
 cp .env.example .env
 
 # Edit .env with your credentials:
-# - ANTHROPIC_API_KEY (get from https://console.anthropic.com/)
-# - GITHUB_TOKEN (get from https://github.com/settings/tokens)
-# - GITHUB_OWNER (your GitHub username)
-# - GITHUB_REPO (repository name)
+ANTHROPIC_API_KEY=your_key_here     # Get from https://console.anthropic.com/
+GITHUB_TOKEN=your_token_here        # Get from https://github.com/settings/tokens
+GITHUB_OWNER=your_username          # Your GitHub username
+GITHUB_REPO=your_repo_name          # Repository name
 ```
 
-### 3. Test Detective Agent
+### 3. Start Automated Issue Monitoring
 
 ```bash
-# Run on a GitHub issue
-npm run test -- 123
-
-# Replace 123 with your issue number
+# Start the watcher - it will continuously monitor for new issues
+npm run watch:issues
 ```
+
+**What happens:**
+- Checks for new GitHub issues every 30 seconds
+- Automatically processes up to 3 issues concurrently
+- Each issue goes through all 12 agents
+- Creates branches, commits code, and opens PRs
+- Comments on issues with progress updates
+- No manual intervention needed (unless an error occurs)
 
 **Example Output:**
 ```
@@ -81,20 +90,20 @@ User-facing issue affecting homepage visibility, but website remains functional.
 ✅ Test completed successfully!
 ```
 
-### 4. Test Multi-Agent Pipeline (NEW!)
+### 4. Manual Processing (Alternative)
+
+If you want to process a specific issue manually:
 
 ```bash
-# Run Detective → Archaeologist pipeline
-npm run test:pipeline -- 123
+# Run full 12-stage pipeline on a single issue
+npm run test:full -- <issue-number>
 
-# Replace 123 with your issue number
+# Continue a paused/failed pipeline
+npm run continue -- ISSUE-<number>
+
+# Clean up task artifacts and close PR
+npm run cleanup -- ISSUE-<number>
 ```
-
-**What Happens:**
-- Stage 1: Detective analyzes the issue and creates triage report
-- Stage 2: Archaeologist reads triage, searches codebase, finds root cause
-- Both outputs saved to `tasks/ISSUE-123/`
-- State tracking in `tasks/ISSUE-123/state.json`
 
 **Example Output:**
 ```
@@ -190,16 +199,25 @@ ai-team-mvp/
 ✅ **Agents:**
 - [x] Detective (Stage 1) - Bug triage
 - [x] Archaeologist (Stage 2) - Root cause analysis
-- [ ] Surgeon (Stage 3) - Implementation
-- [ ] Critic (Stage 4) - Code review
-- [ ] Validator (Stage 5) - Testing
-- [ ] Skeptic (Stage 6) - QA
-- [ ] Gatekeeper (Stage 7) - Staging deployment
-- [ ] Advocate (Stage 8) - UAT
-- [ ] Planner (Stage 9) - Production planning
-- [ ] Commander (Stage 10) - Production deployment
-- [ ] Guardian (Stage 11) - Monitoring
-- [ ] Historian (Stage 12) - Documentation
+- [x] Surgeon (Stage 3) - Implementation
+- [x] Critic (Stage 4) - Code review
+- [x] Validator (Stage 5) - Testing
+- [x] Skeptic (Stage 6) - QA
+- [x] Gatekeeper (Stage 7) - Staging deployment
+- [x] Advocate (Stage 8) - UAT
+- [x] Planner (Stage 9) - Production planning
+- [x] Commander (Stage 10) - Production deployment
+- [x] Guardian (Stage 11) - Monitoring
+- [x] Historian (Stage 12) - Documentation
+
+✅ **Automation:**
+- [x] Automated issue monitoring
+- [x] Concurrent issue processing (max 3)
+- [x] Git branch creation per issue
+- [x] Automated commits and PR creation
+- [x] GitHub issue comments and labels
+- [x] Pipeline state management
+- [x] Error handling and recovery
 
 ✅ **Testing:**
 - [x] Test script for Detective agent
