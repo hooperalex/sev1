@@ -61,8 +61,10 @@ async function main() {
         console.log('📡 Initializing...');
         const githubClient = new GitHubClient_1.GitHubClient(process.env.GITHUB_TOKEN, process.env.GITHUB_OWNER, process.env.GITHUB_REPO);
         const gitClient = new GitClient_1.GitClient();
-        const agentRunner = new AgentRunner_1.AgentRunner(process.env.ANTHROPIC_API_KEY, './.claude/agents');
-        const orchestrator = new Orchestrator_1.Orchestrator(agentRunner, githubClient, gitClient, './tasks');
+        const agentRunner = new AgentRunner_1.AgentRunner(process.env.ANTHROPIC_API_KEY, './.claude/agents', null // No wiki client for continue script
+        );
+        const orchestrator = new Orchestrator_1.Orchestrator(agentRunner, githubClient, gitClient, null, // No wiki client
+        './tasks');
         // Load existing task
         console.log(`📥 Loading task ${taskId}...\n`);
         let taskState = orchestrator.loadTaskState(taskId);

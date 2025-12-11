@@ -9,6 +9,7 @@ import * as dotenv from 'dotenv';
 import { AgentRunner } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
+import { WikiClient } from './integrations/WikiClient';
 import { Orchestrator } from './Orchestrator';
 import { logger } from './utils/logger';
 import * as fs from 'fs';
@@ -27,6 +28,7 @@ const CHECK_INTERVAL = 30000; // Check every 30 seconds
 class IssueWatcher {
   private githubClient: GitHubClient;
   private gitClient: GitClient;
+  private wikiClient: WikiClient | null;
   private orchestrator: Orchestrator;
   private state: WatcherState;
   private isRunning: boolean = false;
@@ -43,15 +45,34 @@ class IssueWatcher {
 
     this.gitClient = new GitClient();
 
+    // Initialize WikiClient if configuration is available
+    if (process.env.WIKI_REPO_URL) {
+      const wikiRepoUrl = process.env.WIKI_REPO_URL
+        .replace('{GITHUB_OWNER}', process.env.GITHUB_OWNER!)
+        .replace('{GITHUB_REPO}', process.env.GITHUB_REPO!);
+
+      this.wikiClient = new WikiClient(
+        wikiRepoUrl,
+        process.env.WIKI_LOCAL_PATH || './wiki'
+      );
+
+      logger.info('WikiClient initialized', { repoUrl: wikiRepoUrl });
+    } else {
+      this.wikiClient = null;
+      logger.warn('Wiki configuration not found, running without wiki integration');
+    }
+
     const agentRunner = new AgentRunner(
       process.env.ANTHROPIC_API_KEY!,
-      './.claude/agents'
+      './.claude/agents',
+      this.wikiClient
     );
 
     this.orchestrator = new Orchestrator(
       agentRunner,
       this.githubClient,
       this.gitClient,
+      this.wikiClient,
       './tasks'
     );
 
@@ -211,6 +232,22 @@ class IssueWatcher {
     console.log(`⏱️  Check interval: ${CHECK_INTERVAL / 1000}s`);
     console.log(`🔄 Max concurrent tasks: ${this.MAX_CONCURRENT_TASKS}`);
     console.log(`📝 Processed issues: ${this.state.processedIssues.length}`);
+    console.log('='.repeat(80));
+
+    // Initialize wiki if available
+    if (this.wikiClient) {
+      console.log('📚 Initializing wiki...');
+      try {
+        await this.wikiClient.initialize();
+        await this.wikiClient.ensureWikiExists();
+        console.log('✅ Wiki initialized successfully');
+      } catch (error: any) {
+        console.error(`⚠️  Wiki initialization failed: ${error.message}`);
+        console.error('   Continuing without wiki integration...');
+        this.wikiClient = null;
+      }
+    }
+
     console.log('='.repeat(80));
     console.log('\nPress Ctrl+C to stop\n');
 

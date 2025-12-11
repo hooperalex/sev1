@@ -14,6 +14,8 @@ import * as path from 'path';
 import { AgentRunner, AgentContext, AgentResult } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
+import { WikiClient } from './integrations/WikiClient';
+import { parseArchivistOutput, applySectionUpdate } from './utils/parseArchivistOutput';
 import { logger } from './utils/logger';
 
 export interface TaskState {
@@ -59,6 +61,7 @@ export class Orchestrator {
   private agentRunner: AgentRunner;
   private githubClient: GitHubClient;
   private gitClient: GitClient;
+  private wikiClient: WikiClient | null;
   private tasksDir: string;
   private config: PipelineConfig;
 
@@ -66,14 +69,16 @@ export class Orchestrator {
     agentRunner: AgentRunner,
     githubClient: GitHubClient,
     gitClient: GitClient,
+    wikiClient: WikiClient | null = null,
     tasksDir: string = './tasks'
   ) {
     this.agentRunner = agentRunner;
     this.githubClient = githubClient;
     this.gitClient = gitClient;
+    this.wikiClient = wikiClient;
     this.tasksDir = tasksDir;
 
-    // Define the 13-stage pipeline (added Intake as Stage 0)
+    // Define the 14-stage pipeline (added Intake as Stage 0, Archivist as Stage 13)
     this.config = {
       stages: [
         { name: 'Stage 0: Intake & Validation', agentName: 'intake', requiresApproval: false, artifactName: 'intake-analysis.md' },
@@ -88,7 +93,8 @@ export class Orchestrator {
         { name: 'Stage 9: Production Planning', agentName: 'planner', requiresApproval: false, artifactName: 'production-plan.md' },
         { name: 'Stage 10: Production Deployment', agentName: 'commander', requiresApproval: false, artifactName: 'deployment-log.md' },
         { name: 'Stage 11: Monitoring', agentName: 'guardian', requiresApproval: false, artifactName: 'monitoring-report.md' },
-        { name: 'Stage 12: Documentation', agentName: 'historian', requiresApproval: false, artifactName: 'retrospective.md' }
+        { name: 'Stage 12: Documentation', agentName: 'historian', requiresApproval: false, artifactName: 'retrospective.md' },
+        { name: 'Stage 13: Wiki Documentation', agentName: 'archivist', requiresApproval: false, artifactName: 'wiki-updates.md' }
       ]
     };
 
@@ -245,6 +251,11 @@ export class Orchestrator {
             !surgeonOutput.includes('cannot implement')) {
           await this.createPullRequest(taskState);
         }
+      }
+
+      // Step 4: After Archivist completes, update wiki with documented insights
+      if (stageIndex === 13 && stageConfig.agentName === 'archivist' && this.wikiClient) {
+        await this.processArchivistUpdates(taskState, result.output);
       }
 
       // Check if approval is required
@@ -909,6 +920,87 @@ export class Orchestrator {
 
       logger.error('Failed to create pull request', { taskId: taskState.taskId, error: error.message });
       throw new Error(`Failed to create pull request: ${error.message}`);
+    }
+  }
+
+  /**
+   * Step 4: Process Archivist updates and commit to wiki
+   */
+  private async processArchivistUpdates(taskState: TaskState, archivistOutput: string): Promise<void> {
+    try {
+      logger.info('Processing Archivist wiki updates', { taskId: taskState.taskId });
+
+      // Parse Archivist output
+      const parsed = parseArchivistOutput(archivistOutput);
+
+      if (parsed.updates.length === 0) {
+        logger.warn('No wiki updates found in Archivist output', { taskId: taskState.taskId });
+        return;
+      }
+
+      logger.info(`Applying ${parsed.updates.length} wiki updates`, { taskId: taskState.taskId });
+
+      // Apply each update
+      for (const update of parsed.updates) {
+        try {
+          if (update.action === 'append') {
+            // Check if section-based append
+            if (update.section) {
+              const existingContent = await this.wikiClient!.getPage(update.page);
+              const updatedContent = applySectionUpdate(existingContent, update.section, update.content, 'append');
+              await this.wikiClient!.updatePage(update.page, updatedContent);
+              logger.info('Updated wiki page with section append', {
+                page: update.page,
+                section: update.section
+              });
+            } else {
+              // Simple append to end
+              await this.wikiClient!.appendToPage(update.page, update.content);
+              logger.info('Appended to wiki page', { page: update.page });
+            }
+          } else if (update.action === 'update') {
+            await this.wikiClient!.updatePage(update.page, update.content);
+            logger.info('Updated wiki page', { page: update.page });
+          } else if (update.action === 'create') {
+            await this.wikiClient!.createPage(update.page, update.content);
+            logger.info('Created wiki page', { page: update.page });
+          }
+        } catch (error: any) {
+          logger.error(`Failed to apply wiki update for ${update.page}`, {
+            error: error.message,
+            page: update.page,
+            action: update.action
+          });
+          // Continue with other updates even if one fails
+        }
+      }
+
+      // Commit and push changes
+      await this.wikiClient!.commit(parsed.commitMessage);
+      await this.wikiClient!.push();
+
+      logger.info('Wiki updates committed and pushed successfully', {
+        taskId: taskState.taskId,
+        updatesApplied: parsed.updates.length,
+        commitMessage: parsed.commitMessage
+      });
+
+      // Notify on GitHub
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `📚 **Wiki Updated**\n\n` +
+        `The Archivist has documented insights from this issue in the team wiki.\n\n` +
+        `**Pages Updated:** ${parsed.updates.map(u => u.page.replace('.md', '')).join(', ')}\n\n` +
+        `Check the [wiki](../../wiki) for accumulated knowledge from this and previous issues.`
+      );
+
+    } catch (error: any) {
+      logger.error('Failed to process Archivist updates', {
+        taskId: taskState.taskId,
+        error: error.message
+      });
+      // Don't throw - wiki update failure shouldn't break the pipeline
+      // Just log and continue
     }
   }
 }

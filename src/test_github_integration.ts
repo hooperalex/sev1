@@ -49,13 +49,15 @@ async function main() {
 
     const agentRunner = new AgentRunner(
       process.env.ANTHROPIC_API_KEY!,
-      './.claude/agents'
+      './.claude/agents',
+      null  // No wiki client for test script
     );
 
     const orchestrator = new Orchestrator(
       agentRunner,
       githubClient,
       gitClient,
+      null,  // No wiki client
       './tasks'
     );
 

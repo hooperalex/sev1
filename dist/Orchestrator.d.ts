@@ -11,6 +11,7 @@
 import { AgentRunner } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
+import { WikiClient } from './integrations/WikiClient';
 export interface TaskState {
     taskId: string;
     issueNumber: number;
@@ -51,9 +52,10 @@ export declare class Orchestrator {
     private agentRunner;
     private githubClient;
     private gitClient;
+    private wikiClient;
     private tasksDir;
     private config;
-    constructor(agentRunner: AgentRunner, githubClient: GitHubClient, gitClient: GitClient, tasksDir?: string);
+    constructor(agentRunner: AgentRunner, githubClient: GitHubClient, gitClient: GitClient, wikiClient?: WikiClient | null, tasksDir?: string);
     /**
      * Start a new task from a GitHub issue
      */
@@ -151,5 +153,9 @@ export declare class Orchestrator {
      * Step 3: Create pull request after implementation
      */
     private createPullRequest;
+    /**
+     * Step 4: Process Archivist updates and commit to wiki
+     */
+    private processArchivistUpdates;
 }
 //# sourceMappingURL=Orchestrator.d.ts.map

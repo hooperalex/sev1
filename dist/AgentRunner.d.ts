@@ -1,3 +1,4 @@
+import { WikiClient } from './integrations/WikiClient';
 export interface AgentContext {
     issueUrl?: string;
     issueNumber?: number;
@@ -5,6 +6,8 @@ export interface AgentContext {
     issueBody?: string;
     previousOutput?: string;
     taskId?: string;
+    wikiSummary?: string;
+    wikiSearchResults?: string;
     [key: string]: any;
 }
 export interface AgentResult {
@@ -17,7 +20,8 @@ export interface AgentResult {
 export declare class AgentRunner {
     private client;
     private agentsDir;
-    constructor(apiKey: string, agentsDir?: string);
+    private wikiClient;
+    constructor(apiKey: string, agentsDir?: string, wikiClient?: WikiClient | null);
     /**
      * Run a specific agent with given context
      */
@@ -30,6 +34,10 @@ export declare class AgentRunner {
      * Build prompt by combining agent config and context
      */
     private buildPrompt;
+    /**
+     * Format wiki search results for injection into prompt
+     */
+    private formatSearchResults;
     /**
      * List available agents
      */

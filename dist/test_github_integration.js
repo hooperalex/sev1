@@ -67,8 +67,10 @@ async function main() {
         console.log('📡 Initializing...\n');
         const githubClient = new GitHubClient_1.GitHubClient(process.env.GITHUB_TOKEN, process.env.GITHUB_OWNER, process.env.GITHUB_REPO);
         const gitClient = new GitClient_1.GitClient();
-        const agentRunner = new AgentRunner_1.AgentRunner(process.env.ANTHROPIC_API_KEY, './.claude/agents');
-        const orchestrator = new Orchestrator_1.Orchestrator(agentRunner, githubClient, gitClient, './tasks');
+        const agentRunner = new AgentRunner_1.AgentRunner(process.env.ANTHROPIC_API_KEY, './.claude/agents', null // No wiki client for test script
+        );
+        const orchestrator = new Orchestrator_1.Orchestrator(agentRunner, githubClient, gitClient, null, // No wiki client
+        './tasks');
         // Start task
         console.log(`📥 Fetching issue #${issueNumber}...\n`);
         const taskState = await orchestrator.startTask(issueNumber);

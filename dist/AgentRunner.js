@@ -42,9 +42,10 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const logger_1 = require("./utils/logger");
 class AgentRunner {
-    constructor(apiKey, agentsDir = './.claude/agents') {
+    constructor(apiKey, agentsDir = './.claude/agents', wikiClient = null) {
         this.client = new sdk_1.default({ apiKey });
         this.agentsDir = agentsDir;
+        this.wikiClient = wikiClient;
     }
     /**
      * Run a specific agent with given context
@@ -53,10 +54,44 @@ class AgentRunner {
         const startTime = Date.now();
         try {
             logger_1.logger.info(`Running agent: ${agentName}`, { context });
+            // Enrich context with wiki summary if available
+            if (this.wikiClient && !context.wikiSummary) {
+                try {
+                    context.wikiSummary = await this.wikiClient.getWikiSummary();
+                    logger_1.logger.info(`Injected wiki summary for ${agentName}`, {
+                        summaryLength: context.wikiSummary.length
+                    });
+                }
+                catch (error) {
+                    logger_1.logger.warn(`Failed to get wiki summary for ${agentName}`, {
+                        error: error.message
+                    });
+                }
+            }
             // Load agent configuration
             const agentConfig = this.loadAgentConfig(agentName);
             // Build prompt from config and context
             const prompt = this.buildPrompt(agentConfig, context);
+            // Check if agent wants to search wiki (WIKI_SEARCH: "query")
+            if (this.wikiClient) {
+                const searchMatch = prompt.match(/WIKI_SEARCH:\s*"([^"]+)"/i);
+                if (searchMatch) {
+                    const query = searchMatch[1];
+                    logger_1.logger.info(`Agent ${agentName} searching wiki`, { query });
+                    try {
+                        const results = await this.wikiClient.searchWiki(query);
+                        context.wikiSearchResults = this.formatSearchResults(results);
+                        logger_1.logger.info(`Wiki search results injected`, {
+                            resultsCount: results.length
+                        });
+                    }
+                    catch (error) {
+                        logger_1.logger.warn(`Failed to search wiki for ${agentName}`, {
+                            error: error.message
+                        });
+                    }
+                }
+            }
             // Call Claude API
             logger_1.logger.info(`Calling Claude API for ${agentName}...`);
             const response = await this.client.messages.create({
@@ -126,6 +161,21 @@ class AgentRunner {
         if (context.issueBody) {
             prompt += `\nIssue Description:\n${context.issueBody}\n`;
         }
+        // Add wiki summary if available
+        if (context.wikiSummary) {
+            prompt += `\n${'='.repeat(60)}\n`;
+            prompt += `WIKI KNOWLEDGE BASE:\n`;
+            prompt += `${'='.repeat(60)}\n`;
+            prompt += `${context.wikiSummary}\n`;
+            prompt += `\nTo search wiki for specific information, include: WIKI_SEARCH: "your query"\n`;
+        }
+        // Add wiki search results if available
+        if (context.wikiSearchResults) {
+            prompt += `\n${'='.repeat(60)}\n`;
+            prompt += `WIKI SEARCH RESULTS:\n`;
+            prompt += `${'='.repeat(60)}\n`;
+            prompt += `${context.wikiSearchResults}\n`;
+        }
         if (context.previousOutput) {
             prompt += `\n${'='.repeat(60)}\n`;
             prompt += `OUTPUT FROM PREVIOUS STAGE:\n`;
@@ -133,7 +183,10 @@ class AgentRunner {
             prompt += `${context.previousOutput}\n`;
         }
         // Add any other context fields
-        const standardFields = ['issueUrl', 'issueNumber', 'issueTitle', 'issueBody', 'previousOutput', 'taskId'];
+        const standardFields = [
+            'issueUrl', 'issueNumber', 'issueTitle', 'issueBody',
+            'previousOutput', 'taskId', 'wikiSummary', 'wikiSearchResults'
+        ];
         const customFields = Object.keys(context).filter(k => !standardFields.includes(k));
         if (customFields.length > 0) {
             prompt += `\n${'='.repeat(60)}\n`;
@@ -147,6 +200,20 @@ class AgentRunner {
         prompt += `NOW PROCEED WITH YOUR TASK:\n`;
         prompt += `${'='.repeat(60)}\n`;
         return prompt;
+    }
+    /**
+     * Format wiki search results for injection into prompt
+     */
+    formatSearchResults(results) {
+        if (results.length === 0) {
+            return 'No results found.';
+        }
+        let formatted = `Found ${results.length} relevant wiki entries:\n\n`;
+        results.forEach((result, index) => {
+            formatted += `${index + 1}. **${result.file}** (line ${result.lineNumber})\n`;
+            formatted += `   ${result.content}\n\n`;
+        });
+        return formatted;
     }
     /**
      * List available agents

@@ -46,14 +46,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Orchestrator = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const parseArchivistOutput_1 = require("./utils/parseArchivistOutput");
 const logger_1 = require("./utils/logger");
 class Orchestrator {
-    constructor(agentRunner, githubClient, gitClient, tasksDir = './tasks') {
+    constructor(agentRunner, githubClient, gitClient, wikiClient = null, tasksDir = './tasks') {
         this.agentRunner = agentRunner;
         this.githubClient = githubClient;
         this.gitClient = gitClient;
+        this.wikiClient = wikiClient;
         this.tasksDir = tasksDir;
-        // Define the 13-stage pipeline (added Intake as Stage 0)
+        // Define the 14-stage pipeline (added Intake as Stage 0, Archivist as Stage 13)
         this.config = {
             stages: [
                 { name: 'Stage 0: Intake & Validation', agentName: 'intake', requiresApproval: false, artifactName: 'intake-analysis.md' },
@@ -68,7 +70,8 @@ class Orchestrator {
                 { name: 'Stage 9: Production Planning', agentName: 'planner', requiresApproval: false, artifactName: 'production-plan.md' },
                 { name: 'Stage 10: Production Deployment', agentName: 'commander', requiresApproval: false, artifactName: 'deployment-log.md' },
                 { name: 'Stage 11: Monitoring', agentName: 'guardian', requiresApproval: false, artifactName: 'monitoring-report.md' },
-                { name: 'Stage 12: Documentation', agentName: 'historian', requiresApproval: false, artifactName: 'retrospective.md' }
+                { name: 'Stage 12: Documentation', agentName: 'historian', requiresApproval: false, artifactName: 'retrospective.md' },
+                { name: 'Stage 13: Wiki Documentation', agentName: 'archivist', requiresApproval: false, artifactName: 'wiki-updates.md' }
             ]
         };
         // Ensure tasks directory exists
@@ -196,6 +199,10 @@ class Orchestrator {
                     !surgeonOutput.includes('cannot implement')) {
                     await this.createPullRequest(taskState);
                 }
+            }
+            // Step 4: After Archivist completes, update wiki with documented insights
+            if (stageIndex === 13 && stageConfig.agentName === 'archivist' && this.wikiClient) {
+                await this.processArchivistUpdates(taskState, result.output);
             }
             // Check if approval is required
             if (stageConfig.requiresApproval) {
@@ -752,6 +759,80 @@ class Orchestrator {
             }
             logger_1.logger.error('Failed to create pull request', { taskId: taskState.taskId, error: error.message });
             throw new Error(`Failed to create pull request: ${error.message}`);
+        }
+    }
+    /**
+     * Step 4: Process Archivist updates and commit to wiki
+     */
+    async processArchivistUpdates(taskState, archivistOutput) {
+        try {
+            logger_1.logger.info('Processing Archivist wiki updates', { taskId: taskState.taskId });
+            // Parse Archivist output
+            const parsed = (0, parseArchivistOutput_1.parseArchivistOutput)(archivistOutput);
+            if (parsed.updates.length === 0) {
+                logger_1.logger.warn('No wiki updates found in Archivist output', { taskId: taskState.taskId });
+                return;
+            }
+            logger_1.logger.info(`Applying ${parsed.updates.length} wiki updates`, { taskId: taskState.taskId });
+            // Apply each update
+            for (const update of parsed.updates) {
+                try {
+                    if (update.action === 'append') {
+                        // Check if section-based append
+                        if (update.section) {
+                            const existingContent = await this.wikiClient.getPage(update.page);
+                            const updatedContent = (0, parseArchivistOutput_1.applySectionUpdate)(existingContent, update.section, update.content, 'append');
+                            await this.wikiClient.updatePage(update.page, updatedContent);
+                            logger_1.logger.info('Updated wiki page with section append', {
+                                page: update.page,
+                                section: update.section
+                            });
+                        }
+                        else {
+                            // Simple append to end
+                            await this.wikiClient.appendToPage(update.page, update.content);
+                            logger_1.logger.info('Appended to wiki page', { page: update.page });
+                        }
+                    }
+                    else if (update.action === 'update') {
+                        await this.wikiClient.updatePage(update.page, update.content);
+                        logger_1.logger.info('Updated wiki page', { page: update.page });
+                    }
+                    else if (update.action === 'create') {
+                        await this.wikiClient.createPage(update.page, update.content);
+                        logger_1.logger.info('Created wiki page', { page: update.page });
+                    }
+                }
+                catch (error) {
+                    logger_1.logger.error(`Failed to apply wiki update for ${update.page}`, {
+                        error: error.message,
+                        page: update.page,
+                        action: update.action
+                    });
+                    // Continue with other updates even if one fails
+                }
+            }
+            // Commit and push changes
+            await this.wikiClient.commit(parsed.commitMessage);
+            await this.wikiClient.push();
+            logger_1.logger.info('Wiki updates committed and pushed successfully', {
+                taskId: taskState.taskId,
+                updatesApplied: parsed.updates.length,
+                commitMessage: parsed.commitMessage
+            });
+            // Notify on GitHub
+            await this.githubClient.addComment(taskState.issueNumber, `📚 **Wiki Updated**\n\n` +
+                `The Archivist has documented insights from this issue in the team wiki.\n\n` +
+                `**Pages Updated:** ${parsed.updates.map(u => u.page.replace('.md', '')).join(', ')}\n\n` +
+                `Check the [wiki](../../wiki) for accumulated knowledge from this and previous issues.`);
+        }
+        catch (error) {
+            logger_1.logger.error('Failed to process Archivist updates', {
+                taskId: taskState.taskId,
+                error: error.message
+            });
+            // Don't throw - wiki update failure shouldn't break the pipeline
+            // Just log and continue
         }
     }
 }
