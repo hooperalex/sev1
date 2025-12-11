@@ -1,0 +1,44 @@
+{
+  "name": "ai-team-mvp",
+  "version": "1.0.0",
+  "description": "MVP: AI development team that fixes bugs end-to-end",
+  "main": "dist/index.js",
+  "bin": {
+    "ai-team": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/index.ts",
+    "cli": "ts-node src/cli.ts",
+    "test": "ts-node src/test.ts",
+    "test:pipeline": "ts-node src/test_pipeline.ts",
+    "test:full": "ts-node src/test_full_pipeline.ts",
+    "test:github": "ts-node src/test_github_integration.ts",
+    "start": "node dist/index.js",
+    "watch": "tsc --watch"
+  },
+  "keywords": ["ai", "automation", "claude", "bugfix"],
+  "author": "Your Team",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.20.0",
+    "@octokit/rest": "^20.0.2",
+    "simple-git": "^3.22.0",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2",
+    "winston": "^3.11.0",
+    "dotenv": "^16.3.1",
+    "yaml": "^2.3.4",
+    "ora": "^5.4.1",
+    "inquirer": "^8.2.6"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/inquirer": "^9.0.7",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

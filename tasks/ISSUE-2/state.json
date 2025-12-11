@@ -1,0 +1,74 @@
+{
+  "taskId": "ISSUE-2",
+  "issueNumber": 2,
+  "issueTitle": "We need a website",
+  "issueBody": "We are using vercel and we need a web front end.",
+  "issueUrl": "https://github.com/hooperalex/sev1/issues/2",
+  "branchName": "fix/issue-2-we-need-a-website",
+  "currentStage": 0,
+  "stages": [
+    {
+      "stageName": "Stage 1: Triage",
+      "agentName": "detective",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 2: Root Cause Analysis",
+      "agentName": "archaeologist",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 3: Implementation",
+      "agentName": "surgeon",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 4: Code Review",
+      "agentName": "critic",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 5: Testing",
+      "agentName": "validator",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 6: QA",
+      "agentName": "skeptic",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 7: Staging Deployment",
+      "agentName": "gatekeeper",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 8: UAT",
+      "agentName": "advocate",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 9: Production Planning",
+      "agentName": "planner",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 10: Production Deployment",
+      "agentName": "commander",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 11: Monitoring",
+      "agentName": "guardian",
+      "status": "pending"
+    },
+    {
+      "stageName": "Stage 12: Documentation",
+      "agentName": "historian",
+      "status": "pending"
+    }
+  ],
+  "status": "pending",
+  "createdAt": "2025-12-11T13:25:04.105Z",
+  "updatedAt": "2025-12-11T13:25:04.106Z"
+}

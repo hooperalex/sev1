@@ -1,0 +1,2 @@
+{"error":"Not Found - https://docs.github.com/rest/issues/issues#get-an-issue","level":"error","message":"Failed to fetch issue #1","timestamp":"2025-12-11 23:13:24"}
+{"branchName":"fix/issue-2-we-need-a-website","error":"fatal: not a git repository (or any of the parent directories): .git\n","level":"error","message":"Create branch failed","timestamp":"2025-12-12 00:25:04"}
