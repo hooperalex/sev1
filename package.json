@@ -16,6 +16,8 @@
     "test:github": "ts-node src/test_github_integration.ts",
     "continue": "ts-node src/continue_pipeline.ts",
     "cleanup": "ts-node src/cleanup_task.ts",
+    "approve-closure": "ts-node src/approve_closure.ts",
+    "override": "ts-node src/override_termination.ts",
     "watch:issues": "ts-node src/issue_watcher.ts",
     "start": "node dist/index.js",
     "watch": "tsc --watch"

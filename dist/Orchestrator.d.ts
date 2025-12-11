@@ -22,7 +22,7 @@ export interface TaskState {
     prUrl?: string;
     currentStage: number;
     stages: StageResult[];
-    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval';
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval' | 'awaiting_closure_approval';
     createdAt: string;
     updatedAt: string;
     error?: string;
@@ -118,6 +118,18 @@ export declare class Orchestrator {
      * Extract summary from agent output
      */
     private extractSummary;
+    /**
+     * Check if pipeline should halt based on agent consensus
+     */
+    private checkForEarlyTermination;
+    /**
+     * Extract decision from Intake output
+     */
+    private extractDecision;
+    /**
+     * Notify about early termination and request human approval
+     */
+    private notifyEarlyTermination;
     /**
      * Step 2: Commit and push changes after implementation
      */

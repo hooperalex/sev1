@@ -27,7 +27,7 @@ export interface TaskState {
   prUrl?: string;
   currentStage: number;
   stages: StageResult[];
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval' | 'awaiting_closure_approval';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval';
   createdAt: string;
   updatedAt: string;
   error?: string;
@@ -73,10 +73,9 @@ export class Orchestrator {
     this.gitClient = gitClient;
     this.tasksDir = tasksDir;
 
-    // Define the 13-stage pipeline (added Intake as Stage 0)
+    // Define the 12-stage pipeline
     this.config = {
       stages: [
-        { name: 'Stage 0: Intake & Validation', agentName: 'intake', requiresApproval: false, artifactName: 'intake-analysis.md' },
         { name: 'Stage 1: Triage', agentName: 'detective', requiresApproval: false, artifactName: 'triage-report.md' },
         { name: 'Stage 2: Root Cause Analysis', agentName: 'archaeologist', requiresApproval: false, artifactName: 'root-cause-analysis.md' },
         { name: 'Stage 3: Implementation', agentName: 'surgeon', requiresApproval: false, artifactName: 'implementation-plan.md' },
@@ -214,37 +213,17 @@ export class Orchestrator {
       const artifactPath = this.saveArtifact(taskId, stageConfig.artifactName, result.output);
       stageResult.artifactPath = artifactPath;
 
-      // Step 2: After Surgeon completes, commit and push changes (only if implementation occurred)
-      if (stageIndex === 3 && stageConfig.agentName === 'surgeon') {
-        const surgeonOutput = result.output.toLowerCase();
-        if (!surgeonOutput.includes('implementation halted') &&
-            !surgeonOutput.includes('cannot implement')) {
-          await this.commitAndPushChanges(taskState);
-        }
+      // Step 2: After Surgeon completes, commit and push changes
+      if (stageIndex === 2 && stageConfig.agentName === 'surgeon') {
+        await this.commitAndPushChanges(taskState);
       }
 
       // Add GitHub comment: Agent completed work
       await this.notifyStageComplete(taskState, stageIndex);
 
-      // Check if we should halt pipeline based on agent consensus
-      const shouldHalt = await this.checkForEarlyTermination(taskState, stageIndex);
-      if (shouldHalt) {
-        logger.info('Early termination requested, awaiting human approval', { taskId: taskState.taskId, stage: stageIndex });
-        taskState.status = 'awaiting_closure_approval';
-        taskState.updatedAt = new Date().toISOString();
-        this.saveTaskState(taskState);
-
-        await this.notifyEarlyTermination(taskState, stageIndex);
-        return taskState;
-      }
-
-      // Step 3: After Surgeon completes, create PR (only if implementation occurred)
-      if (stageIndex === 3 && stageConfig.agentName === 'surgeon' && !taskState.prNumber) {
-        const surgeonOutput = result.output.toLowerCase();
-        if (!surgeonOutput.includes('implementation halted') &&
-            !surgeonOutput.includes('cannot implement')) {
-          await this.createPullRequest(taskState);
-        }
+      // Step 3: After Surgeon completes, create PR
+      if (stageIndex === 2 && stageConfig.agentName === 'surgeon' && !taskState.prNumber) {
+        await this.createPullRequest(taskState);
       }
 
       // Check if approval is required
@@ -578,7 +557,6 @@ export class Orchestrator {
    */
   private getAgentEmoji(agentName: string): string {
     const emojiMap: { [key: string]: string } = {
-      intake: '📥',
       detective: '🔍',
       archaeologist: '⛏️',
       surgeon: '🔧',
@@ -610,115 +588,6 @@ export class Orchestrator {
     const lines = output.split('\n').filter(line => line.trim() && !line.startsWith('#'));
     const preview = lines.slice(0, 5).join('\n');
     return preview.length > 300 ? preview.substring(0, 300) + '...' : preview;
-  }
-
-  /**
-   * Check if pipeline should halt based on agent consensus
-   */
-  private async checkForEarlyTermination(taskState: TaskState, currentStageIndex: number): Promise<boolean> {
-    // Check after Intake (Stage 0)
-    if (currentStageIndex === 0) {
-      const intakeOutput = taskState.stages[0].output || '';
-      const intakeDecision = this.extractDecision(intakeOutput);
-
-      if (intakeDecision && !['PROCEED'].includes(intakeDecision)) {
-        logger.info('Intake recommends halting', { taskId: taskState.taskId, decision: intakeDecision });
-        return true;
-      }
-    }
-
-    // Check after Detective (Stage 1)
-    if (currentStageIndex === 1) {
-      const detectiveOutput = taskState.stages[1].output || '';
-      if (detectiveOutput.includes('NOT A BUG') ||
-          detectiveOutput.includes('CLOSE') ||
-          detectiveOutput.includes('REDIRECT') ||
-          detectiveOutput.includes('INVALID')) {
-        logger.info('Detective recommends halting', { taskId: taskState.taskId });
-        return true;
-      }
-    }
-
-    // Check after Archaeologist (Stage 2) for consensus
-    if (currentStageIndex === 2) {
-      const intakeOutput = taskState.stages[0]?.output || '';
-      const detectiveOutput = taskState.stages[1]?.output || '';
-      const archaeologistOutput = taskState.stages[2]?.output || '';
-
-      let closureCount = 0;
-
-      if (intakeOutput.includes('CLOSE') || intakeOutput.includes('NEEDS_MORE_INFO')) closureCount++;
-      if (detectiveOutput.includes('NOT A BUG') || detectiveOutput.includes('CLOSE')) closureCount++;
-      if (archaeologistOutput.includes('NOT A BUG') || archaeologistOutput.includes('PROCESS FAILURE')) closureCount++;
-
-      if (closureCount >= 2) {
-        logger.info('Agent consensus recommends halting', { taskId: taskState.taskId, count: closureCount });
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * Extract decision from Intake output
-   */
-  private extractDecision(output: string): string | null {
-    const match = output.match(/##\s*Decision:\s*(\w+)/i);
-    return match ? match[1].toUpperCase() : null;
-  }
-
-  /**
-   * Notify about early termination and request human approval
-   */
-  private async notifyEarlyTermination(taskState: TaskState, stageIndex: number): Promise<void> {
-    try {
-      const stageConfig = this.config.stages[stageIndex];
-
-      let reason = '';
-      if (stageIndex === 0) {
-        const intakeDecision = this.extractDecision(taskState.stages[0].output || '');
-        reason = `Intake Agent recommends: ${intakeDecision}`;
-      } else if (stageIndex === 1) {
-        reason = 'Detective identified this as NOT A BUG';
-      } else if (stageIndex === 2) {
-        reason = 'Multiple agents recommend closing this issue';
-      }
-
-      const comment = `⚠️ **EARLY TERMINATION REQUESTED**\n\n` +
-        `The AI pipeline has detected this issue should not proceed to full implementation.\n\n` +
-        `**Stage:** ${stageConfig.name}\n` +
-        `**Reason:** ${reason}\n\n` +
-        `### Agent Recommendations:\n\n`;
-
-      // Add each agent's recommendation
-      let recommendations = '';
-      for (let i = 0; i <= stageIndex; i++) {
-        const stage = taskState.stages[i];
-        if (stage.status === 'completed' && stage.output) {
-          const summary = this.extractSummary(stage.output);
-          recommendations += `**${stage.agentName}:** ${summary.substring(0, 200)}...\n\n`;
-        }
-      }
-
-      const fullComment = comment + recommendations +
-        `\n### Human Approval Required\n\n` +
-        `Please review the agent analyses and decide:\n\n` +
-        `1. **Approve Closure:** Close this issue as recommended\n` +
-        `   - Command: \`npm run approve-closure -- ${taskState.taskId}\`\n\n` +
-        `2. **Override & Continue:** Force the pipeline to continue\n` +
-        `   - Command: \`npm run override -- ${taskState.taskId}\`\n` +
-        `   - Use with caution - agents identified valid concerns\n\n` +
-        `**Recommendation:** Review the artifacts in \`./tasks/${taskState.taskId}/\` before deciding.`;
-
-      await this.githubClient.addComment(taskState.issueNumber, fullComment);
-      await this.githubClient.addLabel(taskState.issueNumber, 'awaiting-human-review');
-
-      logger.info('Early termination notification sent', { taskId: taskState.taskId });
-
-    } catch (error: any) {
-      logger.warn('Failed to send early termination notification', { error: error.message });
-    }
   }
 
   /**

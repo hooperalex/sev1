@@ -83,5 +83,9 @@ export declare class GitClient {
      * Check if branch exists
      */
     branchExists(branchName: string): Promise<boolean>;
+    /**
+     * Delete a local branch
+     */
+    deleteBranch(branchName: string, force?: boolean): Promise<void>;
 }
 //# sourceMappingURL=GitClient.d.ts.map

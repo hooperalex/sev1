@@ -350,6 +350,26 @@ class GitClient {
             return false;
         }
     }
+    /**
+     * Delete a local branch
+     */
+    async deleteBranch(branchName, force = true) {
+        try {
+            logger_1.logger.info('Deleting branch', { branchName, force });
+            // Switch to main first if we're on the branch to delete
+            const currentBranch = await this.getCurrentBranch();
+            if (currentBranch === branchName) {
+                await this.checkout('main');
+            }
+            // Delete the branch
+            await this.git.deleteLocalBranch(branchName, force);
+            logger_1.logger.info('Branch deleted', { branchName });
+        }
+        catch (error) {
+            logger_1.logger.error('Delete branch failed', { branchName, error: error.message });
+            throw new Error(`Failed to delete branch ${branchName}: ${error.message}`);
+        }
+    }
 }
 exports.GitClient = GitClient;
 //# sourceMappingURL=GitClient.js.map

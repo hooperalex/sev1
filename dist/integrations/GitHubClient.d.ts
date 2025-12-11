@@ -54,6 +54,14 @@ export declare class GitHubClient {
      */
     linkPullRequestToIssue(issueNumber: number, prNumber: number, prUrl: string): Promise<void>;
     /**
+     * Close a pull request
+     */
+    closePullRequest(prNumber: number, comment?: string): Promise<void>;
+    /**
+     * List open issues with specific labels
+     */
+    listOpenIssues(labels?: string[]): Promise<GitHubIssue[]>;
+    /**
      * Parse issue URL to get number
      */
     static parseIssueUrl(url: string): {
