@@ -5011,3 +5011,22 @@
 {"level":"info","message":"Fetched issue: Check production on Vercel agent","timestamp":"2025-12-12 09:51:14"}
 {"branchName":"fix/issue-13-check-production-on-vercel-agent","level":"info","message":"Creating Git branch","timestamp":"2025-12-12 09:51:14"}
 {"branchName":"fix/issue-13-check-production-on-vercel-agent","fromBranch":"main","level":"info","message":"Creating branch","timestamp":"2025-12-12 09:51:14"}
+{"branchName":"fix/issue-13-check-production-on-vercel-agent","error":"error: Your local changes to the following files would be overwritten by checkout:\n\tlogs/combined.log\n\ttasks/.watcher-state.json\nPlease commit your changes or stash them before you switch branches.\nAborting\n","level":"error","message":"Create branch failed","timestamp":"2025-12-12 09:51:15"}
+{"branchName":"fix/issue-13-check-production-on-vercel-agent","error":"Failed to create branch fix/issue-13-check-production-on-vercel-agent: error: Your local changes to the following files would be overwritten by checkout:\n\tlogs/combined.log\n\ttasks/.watcher-state.json\nPlease commit your changes or stash them before you switch branches.\nAborting\n","level":"error","message":"Failed to create branch","timestamp":"2025-12-12 09:51:15"}
+{"error":"Failed to create branch: Failed to create branch fix/issue-13-check-production-on-vercel-agent: error: Your local changes to the following files would be overwritten by checkout:\n\tlogs/combined.log\n\ttasks/.watcher-state.json\nPlease commit your changes or stash them before you switch branches.\nAborting\n","issueNumber":13,"level":"error","message":"Issue processing failed","timestamp":"2025-12-12 09:51:15"}
+{"level":"info","message":"Checking for new issues...","timestamp":"2025-12-12 09:51:44"}
+{"level":"info","message":"Fetching open issues","timestamp":"2025-12-12 09:51:44"}
+{"level":"info","message":"Fetched 11 open issues","timestamp":"2025-12-12 09:51:44"}
+{"level":"info","message":"No new issues found","timestamp":"2025-12-12 09:51:44"}
+{"level":"info","message":"Checking for new issues...","timestamp":"2025-12-12 09:52:14"}
+{"level":"info","message":"Fetching open issues","timestamp":"2025-12-12 09:52:14"}
+{"level":"info","message":"Fetched 11 open issues","timestamp":"2025-12-12 09:52:14"}
+{"level":"info","message":"No new issues found","timestamp":"2025-12-12 09:52:14"}
+{"level":"info","message":"Checking for new issues...","timestamp":"2025-12-12 09:52:44"}
+{"level":"info","message":"Fetching open issues","timestamp":"2025-12-12 09:52:44"}
+{"level":"info","message":"Fetched 11 open issues","timestamp":"2025-12-12 09:52:44"}
+{"level":"info","message":"No new issues found","timestamp":"2025-12-12 09:52:44"}
+{"level":"info","message":"Checking for new issues...","timestamp":"2025-12-12 09:53:14"}
+{"level":"info","message":"Fetching open issues","timestamp":"2025-12-12 09:53:14"}
+{"level":"info","message":"Fetched 11 open issues","timestamp":"2025-12-12 09:53:14"}
+{"level":"info","message":"No new issues found","timestamp":"2025-12-12 09:53:14"}

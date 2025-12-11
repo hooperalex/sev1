@@ -614,6 +614,7 @@ export class Orchestrator {
 
   /**
    * Check if pipeline should halt based on agent consensus
+   * Only flags human for high-risk decisions, auto-closes low-risk issues
    */
   private async checkForEarlyTermination(taskState: TaskState, currentStageIndex: number): Promise<boolean> {
     // Check after Intake (Stage 0)
@@ -621,43 +622,134 @@ export class Orchestrator {
       const intakeOutput = taskState.stages[0].output || '';
       const intakeDecision = this.extractDecision(intakeOutput);
 
-      if (intakeDecision && !['PROCEED'].includes(intakeDecision)) {
-        logger.info('Intake recommends halting', { taskId: taskState.taskId, decision: intakeDecision });
-        return true;
+      // Auto-close clear invalid issues without human approval
+      if (intakeDecision === 'CLOSE') {
+        const requiresQualityScore = this.extractRequirementsQuality(intakeOutput);
+        if (requiresQualityScore !== null && requiresQualityScore < 40) {
+          // Very low quality - auto-close without human
+          logger.info('Auto-closing low quality issue', { taskId: taskState.taskId, score: requiresQualityScore });
+          await this.autoCloseIssue(taskState, 'Low quality - missing requirements');
+          taskState.status = 'completed';
+          return false; // Don't halt, just complete
+        }
       }
-    }
 
-    // Check after Detective (Stage 1)
-    if (currentStageIndex === 1) {
-      const detectiveOutput = taskState.stages[1].output || '';
-      if (detectiveOutput.includes('NOT A BUG') ||
-          detectiveOutput.includes('CLOSE') ||
-          detectiveOutput.includes('REDIRECT') ||
-          detectiveOutput.includes('INVALID')) {
-        logger.info('Detective recommends halting', { taskId: taskState.taskId });
-        return true;
+      // Request human approval only for edge cases
+      if (intakeDecision === 'REQUEST_APPROVAL') {
+        logger.info('Feature request requires stakeholder approval', { taskId: taskState.taskId });
+        return true; // Halt for human approval
+      }
+
+      if (intakeDecision === 'NEEDS_MORE_INFO') {
+        // Auto-request more info without halting
+        await this.requestMoreInformation(taskState);
+        taskState.status = 'completed';
+        return false;
       }
     }
 
     // Check after Archaeologist (Stage 2) for consensus
+    // Only halt if there's DISAGREEMENT, not consensus
     if (currentStageIndex === 2) {
       const intakeOutput = taskState.stages[0]?.output || '';
       const detectiveOutput = taskState.stages[1]?.output || '';
       const archaeologistOutput = taskState.stages[2]?.output || '';
 
-      let closureCount = 0;
+      const intakeDecision = this.extractDecision(intakeOutput);
+      const detectiveRecommendsClosure = detectiveOutput.includes('NOT A BUG') || detectiveOutput.includes('CLOSE');
+      const archaeologistRecommendsClosure = archaeologistOutput.includes('NOT A BUG') || archaeologistOutput.includes('PROCESS FAILURE');
 
-      if (intakeOutput.includes('CLOSE') || intakeOutput.includes('NEEDS_MORE_INFO')) closureCount++;
-      if (detectiveOutput.includes('NOT A BUG') || detectiveOutput.includes('CLOSE')) closureCount++;
-      if (archaeologistOutput.includes('NOT A BUG') || archaeologistOutput.includes('PROCESS FAILURE')) closureCount++;
+      // If all 3 agree to close - auto-close (consensus)
+      if (intakeDecision === 'CLOSE' && detectiveRecommendsClosure && archaeologistRecommendsClosure) {
+        logger.info('All agents agree to close - auto-closing', { taskId: taskState.taskId });
+        await this.autoCloseIssue(taskState, 'Agent consensus - not a bug');
+        taskState.status = 'completed';
+        return false;
+      }
 
-      if (closureCount >= 2) {
-        logger.info('Agent consensus recommends halting', { taskId: taskState.taskId, count: closureCount });
-        return true;
+      // If there's disagreement - flag for human (edge case)
+      const closureCount = [intakeDecision === 'CLOSE', detectiveRecommendsClosure, archaeologistRecommendsClosure].filter(Boolean).length;
+      if (closureCount >= 1 && closureCount < 3) {
+        logger.info('Agent disagreement detected - flagging for human review', { taskId: taskState.taskId, closureCount });
+        return true; // Halt for human decision
       }
     }
 
     return false;
+  }
+
+  /**
+   * Auto-close issue without human approval
+   */
+  private async autoCloseIssue(taskState: TaskState, reason: string): Promise<void> {
+    try {
+      const comment = `🤖 **Automatically Closed by AI Pipeline**\n\n` +
+        `**Reason:** ${reason}\n\n` +
+        `This issue was automatically closed after analysis by the AI team. The agents determined:\n\n`;
+
+      // Add agent summaries
+      let summaries = '';
+      for (let i = 0; i <= taskState.currentStage; i++) {
+        const stage = taskState.stages[i];
+        if (stage.status === 'completed' && stage.output) {
+          const summary = this.extractSummary(stage.output);
+          summaries += `**${stage.agentName}:** ${summary.substring(0, 150)}...\n\n`;
+        }
+      }
+
+      const fullComment = comment + summaries +
+        `\nIf you believe this is incorrect, please provide more details and reopen the issue.`;
+
+      await this.githubClient.closeIssue(taskState.issueNumber, fullComment);
+      await this.githubClient.addLabel(taskState.issueNumber, 'auto-closed');
+      await this.githubClient.removeLabel(taskState.issueNumber, 'in-progress');
+
+      logger.info('Issue auto-closed', { taskId: taskState.taskId, reason });
+    } catch (error: any) {
+      logger.error('Failed to auto-close issue', { taskId: taskState.taskId, error: error.message });
+    }
+  }
+
+  /**
+   * Request more information from issue reporter
+   */
+  private async requestMoreInformation(taskState: TaskState): Promise<void> {
+    try {
+      const intakeOutput = taskState.stages[0].output || '';
+
+      // Extract what's missing from intake analysis
+      const missingMatch = intakeOutput.match(/\*\*What's Missing:\*\*\s*\n([\s\S]*?)(?=\n##|\n\*\*|$)/i);
+      const missing = missingMatch ? missingMatch[1].trim() : 'Additional details';
+
+      const comment = `ℹ️ **More Information Needed**\n\n` +
+        `Thank you for your submission! To help us address this issue, please provide:\n\n` +
+        `${missing}\n\n` +
+        `**For bugs, please include:**\n` +
+        `- Steps to reproduce the issue\n` +
+        `- Expected behavior vs actual behavior\n` +
+        `- Environment details (browser, OS, etc.)\n\n` +
+        `**For feature requests, please include:**\n` +
+        `- What problem this would solve\n` +
+        `- How you envision it working\n` +
+        `- Any acceptance criteria\n\n` +
+        `Once you've added this information, the AI team will automatically re-process this issue.`;
+
+      await this.githubClient.addComment(taskState.issueNumber, comment);
+      await this.githubClient.addLabel(taskState.issueNumber, 'needs-more-info');
+      await this.githubClient.removeLabel(taskState.issueNumber, 'in-progress');
+
+      logger.info('Requested more information', { taskId: taskState.taskId });
+    } catch (error: any) {
+      logger.error('Failed to request more info', { taskId: taskState.taskId, error: error.message });
+    }
+  }
+
+  /**
+   * Extract requirements quality score from Intake output
+   */
+  private extractRequirementsQuality(output: string): number | null {
+    const match = output.match(/##\s*Requirements Quality:\s*(\d+)%/i);
+    return match ? parseInt(match[1], 10) : null;
   }
 
   /**

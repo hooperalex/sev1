@@ -120,8 +120,21 @@ export declare class Orchestrator {
     private extractSummary;
     /**
      * Check if pipeline should halt based on agent consensus
+     * Only flags human for high-risk decisions, auto-closes low-risk issues
      */
     private checkForEarlyTermination;
+    /**
+     * Auto-close issue without human approval
+     */
+    private autoCloseIssue;
+    /**
+     * Request more information from issue reporter
+     */
+    private requestMoreInformation;
+    /**
+     * Extract requirements quality score from Intake output
+     */
+    private extractRequirementsQuality;
     /**
      * Extract decision from Intake output
      */
