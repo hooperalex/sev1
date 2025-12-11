@@ -1,0 +1,17 @@
+
+> ai-team-mvp@1.0.0 continue
+> ts-node src/continue_pipeline.ts ISSUE-2
+
+🔄 AI Team MVP - CONTINUE PIPELINE
+
+📡 Initializing...
+[32minfo[39m: GitClient initialized {"repoPath":"C:\\Users\\hoope\\ai-team-mvp","timestamp":"2025-12-12 00:42:17"}
+📥 Loading task ISSUE-2...
+
+✓ Task loaded: ISSUE-2
+  Title: We need a website
+  Current Stage: 3/12
+  Status: failed
+
+🔄 Running remaining stages...
+

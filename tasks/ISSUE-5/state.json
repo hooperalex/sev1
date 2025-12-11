@@ -1,10 +1,10 @@
 {
-  "taskId": "ISSUE-2",
-  "issueNumber": 2,
-  "issueTitle": "We need a website",
-  "issueBody": "We are using vercel and we need a web front end.",
-  "issueUrl": "https://github.com/hooperalex/sev1/issues/2",
-  "branchName": "fix/issue-2-we-need-a-website",
+  "taskId": "ISSUE-5",
+  "issueNumber": 5,
+  "issueTitle": "Review, label the incoming ticket.",
+  "issueBody": "We should improve the system to update the ticket with labeling analysis for priority, break fix, etc etc.",
+  "issueUrl": "https://github.com/hooperalex/sev1/issues/5",
+  "branchName": "fix/issue-5-review-label-the-incoming-ticket",
   "currentStage": 0,
   "stages": [
     {
@@ -69,6 +69,6 @@
     }
   ],
   "status": "pending",
-  "createdAt": "2025-12-11T13:25:04.105Z",
-  "updatedAt": "2025-12-11T13:25:04.106Z"
+  "createdAt": "2025-12-11T13:57:29.387Z",
+  "updatedAt": "2025-12-11T13:57:29.387Z"
 }
