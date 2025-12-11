@@ -1,1 +1,6 @@
 .env
+logs/
+*.log
+dist/
+node_modules/
+tasks/
