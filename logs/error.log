@@ -2,3 +2,4 @@
 {"branchName":"fix/issue-2-we-need-a-website","error":"fatal: not a git repository (or any of the parent directories): .git\n","level":"error","message":"Create branch failed","timestamp":"2025-12-12 00:25:04"}
 {"branchName":"fix/issue-2-we-need-a-website","error":"repository 'https://github.com//.git/' not found","level":"error","message":"Create branch failed","timestamp":"2025-12-12 00:27:35"}
 {"branchName":"fix/issue-2-we-need-a-website","error":"couldn't find remote ref main","level":"error","message":"Create branch failed","timestamp":"2025-12-12 00:28:21"}
+{"branchName":"fix/issue-2-we-need-a-website","error":"error: Your local changes to the following files would be overwritten by checkout:\n\tlogs/combined.log\n\ttasks/ISSUE-2/state.json\nPlease commit your changes or stash them before you switch branches.\nAborting\n","level":"error","message":"Create branch failed","timestamp":"2025-12-12 00:34:47"}
