@@ -229,6 +229,60 @@ export class GitHubClient {
   }
 
   /**
+   * Close a pull request
+   */
+  async closePullRequest(prNumber: number, comment?: string): Promise<void> {
+    try {
+      logger.info('Closing pull request', { prNumber });
+
+      if (comment) {
+        await this.octokit.issues.createComment({
+          owner: this.owner,
+          repo: this.repo,
+          issue_number: prNumber,
+          body: comment
+        });
+      }
+
+      await this.octokit.pulls.update({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: prNumber,
+        state: 'closed'
+      });
+
+      logger.info('Pull request closed', { prNumber });
+    } catch (error: any) {
+      logger.error('Failed to close pull request', { prNumber, error: error.message });
+      throw new Error(`Failed to close pull request: ${error.message}`);
+    }
+  }
+
+  /**
+   * List open issues with specific labels
+   */
+  async listOpenIssues(labels?: string[]): Promise<GitHubIssue[]> {
+    try {
+      logger.info('Fetching open issues', { labels });
+
+      const response = await this.octokit.issues.listForRepo({
+        owner: this.owner,
+        repo: this.repo,
+        state: 'open',
+        labels: labels?.join(','),
+        per_page: 100
+      });
+
+      logger.info(`Fetched ${response.data.length} open issues`);
+
+      return response.data as GitHubIssue[];
+    } catch (error: any) {
+      logger.error('Failed to fetch open issues', { error: error.message });
+      throw new Error(`Failed to fetch open issues: ${error.message}`);
+    }
+  }
+
+  /**
    * Parse issue URL to get number
    */
   static parseIssueUrl(url: string): { owner: string; repo: string; number: number } | null {

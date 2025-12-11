@@ -369,4 +369,26 @@ export class GitClient {
       return false;
     }
   }
+
+  /**
+   * Delete a local branch
+   */
+  async deleteBranch(branchName: string, force: boolean = true): Promise<void> {
+    try {
+      logger.info('Deleting branch', { branchName, force });
+
+      // Switch to main first if we're on the branch to delete
+      const currentBranch = await this.getCurrentBranch();
+      if (currentBranch === branchName) {
+        await this.checkout('main');
+      }
+
+      // Delete the branch
+      await this.git.deleteLocalBranch(branchName, force);
+      logger.info('Branch deleted', { branchName });
+    } catch (error: any) {
+      logger.error('Delete branch failed', { branchName, error: error.message });
+      throw new Error(`Failed to delete branch ${branchName}: ${error.message}`);
+    }
+  }
 }

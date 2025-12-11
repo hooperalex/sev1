@@ -678,6 +678,12 @@ export class Orchestrator {
       await this.githubClient.linkPullRequestToIssue(taskState.issueNumber, pr.number, pr.html_url);
 
     } catch (error: any) {
+      // If PR already exists, just log and continue (don't fail the stage)
+      if (error.message && error.message.includes('pull request already exists')) {
+        logger.info('Pull request already exists, skipping creation', { taskId: taskState.taskId, branch: taskState.branchName });
+        return;
+      }
+
       logger.error('Failed to create pull request', { taskId: taskState.taskId, error: error.message });
       throw new Error(`Failed to create pull request: ${error.message}`);
     }

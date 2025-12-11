@@ -15,6 +15,8 @@
     "test:full": "ts-node src/test_full_pipeline.ts",
     "test:github": "ts-node src/test_github_integration.ts",
     "continue": "ts-node src/continue_pipeline.ts",
+    "cleanup": "ts-node src/cleanup_task.ts",
+    "watch:issues": "ts-node src/issue_watcher.ts",
     "start": "node dist/index.js",
     "watch": "tsc --watch"
   },
