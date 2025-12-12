@@ -70,12 +70,25 @@ export class VercelClient {
   }
 
   /**
-   * Create a new deployment
+   * Create a new deployment by redeploying the latest production deployment
+   * Note: Since project is connected to GitHub via Vercel dashboard,
+   * deployments happen automatically on push. This method triggers a redeploy.
    */
   async createDeployment(gitBranch: string, target: 'production' | 'staging' = 'staging'): Promise<VercelDeployment> {
     try {
       logger.info('Creating Vercel deployment', { gitBranch, target });
 
+      // Get the latest deployment to redeploy from
+      const deployments = await this.listDeployments({ limit: 1 });
+
+      if (deployments.length === 0) {
+        throw new Error('No existing deployments found. Push code to GitHub to trigger initial deployment.');
+      }
+
+      const sourceDeploymentId = deployments[0].id;
+      logger.info('Redeploying from existing deployment', { sourceDeploymentId });
+
+      // Use redeploy API which doesn't require gitSource
       const response = await fetch(`${this.baseUrl}/v13/deployments`, {
         method: 'POST',
         headers: {
@@ -84,13 +97,10 @@ export class VercelClient {
         },
         body: JSON.stringify({
           name: this.projectId,
-          gitSource: {
-            type: 'github',
-            ref: gitBranch
-          },
+          deploymentId: sourceDeploymentId,
           target,
           projectSettings: {
-            framework: 'nextjs'
+            framework: null
           }
         })
       });
@@ -107,6 +117,25 @@ export class VercelClient {
     } catch (error: any) {
       logger.error('Failed to create deployment', { error: error.message });
       throw new Error(`Failed to create Vercel deployment: ${error.message}`);
+    }
+  }
+
+  /**
+   * Trigger a deployment hook (if configured in Vercel project settings)
+   */
+  async triggerDeployHook(hookUrl: string): Promise<{ triggered: boolean; error?: string }> {
+    try {
+      const response = await fetch(hookUrl, { method: 'POST' });
+
+      if (!response.ok) {
+        return { triggered: false, error: `Hook returned ${response.status}` };
+      }
+
+      logger.info('Deploy hook triggered successfully');
+      return { triggered: true };
+    } catch (error: any) {
+      logger.error('Failed to trigger deploy hook', { error: error.message });
+      return { triggered: false, error: error.message };
     }
   }
 

@@ -23,26 +23,32 @@
     "start": "node dist/index.js",
     "watch": "tsc --watch"
   },
-  "keywords": ["ai", "automation", "claude", "bugfix"],
+  "keywords": [
+    "ai",
+    "automation",
+    "claude",
+    "bugfix"
+  ],
   "author": "Your Team",
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@octokit/rest": "^20.0.2",
-    "simple-git": "^3.22.0",
-    "commander": "^11.1.0",
     "chalk": "^4.1.2",
-    "winston": "^3.11.0",
+    "commander": "^11.1.0",
     "dotenv": "^16.3.1",
-    "yaml": "^2.3.4",
+    "inquirer": "^8.2.6",
     "ora": "^5.4.1",
-    "inquirer": "^8.2.6"
+    "simple-git": "^3.22.0",
+    "winston": "^3.11.0",
+    "yaml": "^2.3.4"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
     "@types/inquirer": "^9.0.7",
-    "typescript": "^5.3.3",
-    "ts-node": "^10.9.2"
+    "@types/node": "^20.10.5",
+    "@vercel/node": "^5.5.15",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   },
   "engines": {
     "node": ">=18.0.0"
