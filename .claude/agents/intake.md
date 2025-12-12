@@ -99,22 +99,25 @@ Evaluate the issue description for:
 ### Step 4: Make Recommendation
 
 **PROCEED** - Issue is ready for the full pipeline
-- Requirements are adequate or better
-- Issue type is clear (bug or approved feature)
+- Requirements are adequate or better (70%+)
+- Issue type is clear (bug, feature, documentation, etc.)
 - Priority assigned
 - Ready for Detective agent
+- **Philosophy:** If a human created this issue, they've already approved it - just execute
 
 **NEEDS_MORE_INFO** - Issue needs clarification
 - Requirements are incomplete (40-69%)
-- Missing critical details
+- Missing critical details needed to implement
 - Pause pipeline and request more information
 - Add "needs-more-info" label
 
-**REQUEST_APPROVAL** - Feature request that needs stakeholder buy-in
-- Classified as FEATURE with adequate requirements
-- Should not proceed without explicit approval
-- Add "pending-approval" label
-- Pause for human decision
+**REQUEST_APPROVAL** - (RARELY USED) Only for edge cases
+- Use this ONLY if the issue appears to be:
+  - A potential security risk that wasn't thought through
+  - Contradicts existing system design in a dangerous way
+  - Could cause data loss or system instability
+- **Default assumption:** Trust that the human who created the issue has already approved it
+- Don't use this for normal features, even complex ones
 
 **CLOSE** - Issue should be closed
 - Requirements insufficient (<40%) AND author unresponsive
