@@ -1389,17 +1389,18 @@ ${logs.logs.slice(-10).map(l => l.message).join('\n')}
         logger.info('Appended deployment info to artifact', { artifactPath });
       }
 
-      // 7. Notify GitHub with success
-      await this.githubClient.addComment(
-        taskState.issueNumber,
-        `✅ **Production Deployment Complete**\n\n` +
-        `🌐 **URL:** ${readyDeployment.url}\n` +
-        `📊 **Status:** ${readyDeployment.readyState}\n` +
-        `❤️ **Health:** ${health.healthy ? 'Healthy' : 'Unhealthy'} (${health.statusCode})\n` +
-        `⏱️ **Response Time:** ${health.responseTime}ms`
-      );
+      // 7. Handle based on health status
+      if (health.healthy) {
+        await this.handleProductionSuccess(taskState, readyDeployment.url, health);
+      } else {
+        await this.handleProductionFailure(taskState, 'Health check failed', {
+          url: readyDeployment.url,
+          statusCode: health.statusCode,
+          responseTime: health.responseTime
+        });
+      }
 
-      logger.info('Production deployment successful', {
+      logger.info('Production deployment completed', {
         deploymentId: readyDeployment.id,
         url: readyDeployment.url,
         healthy: health.healthy
@@ -1411,16 +1412,155 @@ ${logs.logs.slice(-10).map(l => l.message).join('\n')}
         error: error.message
       });
 
-      // Notify GitHub of failure
-      await this.githubClient.addComment(
-        taskState.issueNumber,
-        `❌ **Production Deployment Failed**\n\n` +
-        `Error: ${error.message}\n\n` +
-        `This is a critical failure. Manual intervention required.`
-      );
+      await this.handleProductionFailure(taskState, error.message);
 
       // Production failures SHOULD block the pipeline
       throw new Error(`Production deployment failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Handle successful production deployment
+   * - Add verified-in-production label
+   * - Post success comment
+   * - Ensure issue is properly closed
+   */
+  private async handleProductionSuccess(
+    taskState: TaskState,
+    deploymentUrl: string,
+    health: { statusCode: number; responseTime: number }
+  ): Promise<void> {
+    try {
+      // Add success label
+      await this.githubClient.addLabel(taskState.issueNumber, 'verified-in-production');
+
+      // Remove any failure labels
+      try {
+        await this.githubClient.removeLabel(taskState.issueNumber, 'deployment-failed');
+      } catch {
+        // Label might not exist, that's fine
+      }
+
+      // Post success comment
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `✅ **Production Deployment Verified**\n\n` +
+        `🌐 **URL:** ${deploymentUrl}\n` +
+        `📊 **Status:** HEALTHY\n` +
+        `🔒 **HTTP Status:** ${health.statusCode}\n` +
+        `⏱️ **Response Time:** ${health.responseTime}ms\n\n` +
+        `The fix has been deployed to production and verified working.\n` +
+        `This issue can now be considered complete.`
+      );
+
+      logger.info('Production deployment verified healthy', {
+        taskId: taskState.taskId,
+        url: deploymentUrl
+      });
+
+    } catch (error: any) {
+      logger.error('Failed to handle production success', { error: error.message });
+    }
+  }
+
+  /**
+   * Handle failed production deployment
+   * - Reopen the issue if closed
+   * - Add deployment-failed label
+   * - Post detailed failure comment
+   * - Create follow-up action
+   */
+  private async handleProductionFailure(
+    taskState: TaskState,
+    reason: string,
+    details?: { url?: string; statusCode?: number; responseTime?: number; logs?: string }
+  ): Promise<void> {
+    try {
+      logger.warn('Handling production deployment failure', {
+        taskId: taskState.taskId,
+        reason
+      });
+
+      // 1. Reopen the issue
+      await this.githubClient.reopenIssue(taskState.issueNumber);
+
+      // 2. Add failure label
+      await this.githubClient.addLabel(taskState.issueNumber, 'deployment-failed');
+
+      // 3. Remove success labels if present
+      try {
+        await this.githubClient.removeLabel(taskState.issueNumber, 'verified-in-production');
+      } catch {
+        // Label might not exist
+      }
+
+      // 4. Build detailed failure comment
+      let comment = `🚨 **Production Deployment Failed**\n\n`;
+      comment += `**Reason:** ${reason}\n\n`;
+
+      if (details) {
+        comment += `**Details:**\n`;
+        if (details.url) comment += `- URL: ${details.url}\n`;
+        if (details.statusCode) comment += `- HTTP Status: ${details.statusCode}\n`;
+        if (details.responseTime) comment += `- Response Time: ${details.responseTime}ms\n`;
+        comment += `\n`;
+      }
+
+      comment += `**Issue has been reopened for investigation.**\n\n`;
+      comment += `**Recommended Actions:**\n`;
+      comment += `1. Check the Vercel deployment logs for build errors\n`;
+      comment += `2. Verify the code changes don't have runtime errors\n`;
+      comment += `3. Check if dependencies are correctly installed\n`;
+      comment += `4. Review the health check endpoint responses\n\n`;
+      comment += `The AI team will re-attempt the fix once the issue is investigated.`;
+
+      await this.githubClient.addComment(taskState.issueNumber, comment);
+
+      // 5. Update task state
+      taskState.status = 'failed';
+      if (taskState.productionDeployment) {
+        taskState.productionDeployment.healthy = false;
+      }
+      this.saveTaskState(taskState);
+
+      logger.info('Production failure handled - issue reopened', {
+        taskId: taskState.taskId,
+        issueNumber: taskState.issueNumber
+      });
+
+    } catch (error: any) {
+      logger.error('Failed to handle production failure', { error: error.message });
+    }
+  }
+
+  /**
+   * Run comprehensive production health verification
+   * Called by Guardian agent or manually to verify production status
+   */
+  async verifyProductionHealth(taskState: TaskState): Promise<{
+    healthy: boolean;
+    report: string;
+  }> {
+    if (!this.vercelClient) {
+      return { healthy: false, report: 'Vercel not configured' };
+    }
+
+    try {
+      const report = await this.runProductionHealthChecks();
+      const isHealthy = report.includes('Overall Status:** HEALTHY');
+
+      if (!isHealthy) {
+        // Trigger failure handling
+        await this.handleProductionFailure(
+          taskState,
+          'Production health check failed after deployment',
+          { logs: report }
+        );
+      }
+
+      return { healthy: isHealthy, report };
+    } catch (error: any) {
+      return { healthy: false, report: `Health check error: ${error.message}` };
     }
   }
 }

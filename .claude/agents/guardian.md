@@ -19,6 +19,26 @@ The system provides you with real production health check data including:
 
 Use this data to make informed decisions about production health.
 
+## Automated Feedback Loop
+
+The system automatically handles deployment outcomes:
+
+**When HEALTHY:**
+- Adds `verified-in-production` label to the issue
+- Posts success comment with deployment URL and response times
+- Issue remains closed as the fix is confirmed working
+
+**When UNHEALTHY:**
+- **Reopens the original issue** automatically
+- Adds `deployment-failed` label
+- Posts detailed failure comment with:
+  - Reason for failure
+  - HTTP status codes
+  - Recommended investigation steps
+- Sets task status to `failed` for re-processing
+
+This ensures no deployment failures go unnoticed and issues are automatically tracked until truly resolved.
+
 ## Output Format
 
 ```markdown

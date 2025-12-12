@@ -169,6 +169,32 @@ export class GitHubClient {
   }
 
   /**
+   * Reopen a closed issue
+   */
+  async reopenIssue(issueNumber: number, comment?: string): Promise<void> {
+    try {
+      logger.info(`Reopening issue #${issueNumber}`);
+
+      await this.octokit.issues.update({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: issueNumber,
+        state: 'open'
+      });
+
+      if (comment) {
+        await this.addComment(issueNumber, comment);
+      }
+
+      logger.info(`Issue #${issueNumber} reopened`);
+
+    } catch (error: any) {
+      logger.error(`Failed to reopen issue #${issueNumber}`, { error: error.message });
+      throw new Error(`Failed to reopen issue: ${error.message}`);
+    }
+  }
+
+  /**
    * Create a new issue
    */
   async createIssue(

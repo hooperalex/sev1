@@ -50,7 +50,9 @@ async function main() {
     console.log(`Found ${deployments.length} deployments:`);
     for (const d of deployments) {
       const date = new Date(d.createdAt).toLocaleString();
-      console.log(`  - ${d.id.substring(0, 12)}... | ${d.target} | ${d.readyState} | ${date}`);
+      const id = d.id ? d.id.substring(0, 12) + '...' : 'N/A';
+      const target = d.target || 'preview';
+      console.log(`  - ${id} | ${target} | ${d.readyState} | ${date}`);
     }
 
     // Test 3: Get current production deployment
