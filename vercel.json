@@ -1,9 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
-  "buildCommand": "mkdir -p public",
-  "outputDirectory": "public",
-  "rewrites": [
-    { "source": "/", "destination": "/api/index" }
-  ]
+  "outputDirectory": "public"
 }
