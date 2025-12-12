@@ -128,9 +128,9 @@ class IssueWatcher {
           return false;
         }
 
-        // Skip if has in-progress or completed label
+        // Skip if has in-progress, completed, or decomposed label
         const labels = issue.labels.map(l => l.name);
-        if (labels.includes('in-progress') || labels.includes('completed')) {
+        if (labels.includes('in-progress') || labels.includes('completed') || labels.includes('decomposed')) {
           return false;
         }
 
@@ -260,6 +260,7 @@ class IssueWatcher {
     const intervalId = setInterval(async () => {
       if (this.isRunning) {
         await this.checkForNewIssues();
+        await this.checkParentCompletion();
       } else {
         clearInterval(intervalId);
       }
@@ -278,6 +279,76 @@ class IssueWatcher {
         process.exit(0);
       }
     });
+  }
+
+  /**
+   * Check if decomposed parent issues should be closed
+   */
+  private async checkParentCompletion(): Promise<void> {
+    try {
+      // Find all decomposed issues
+      const allIssues = await this.githubClient.listOpenIssues();
+      const decomposedIssues = allIssues.filter(issue => {
+        const labels = issue.labels.map(l => l.name);
+        return labels.includes('decomposed');
+      });
+
+      if (decomposedIssues.length === 0) {
+        return;
+      }
+
+      logger.debug(`Checking ${decomposedIssues.length} decomposed parent issue(s)`);
+
+      for (const parentIssue of decomposedIssues) {
+        // Get all sub-issues for this parent
+        const subIssues = allIssues.filter(issue => {
+          const labels = issue.labels.map(l => l.name);
+          return labels.includes(`parent-${parentIssue.number}`);
+        });
+
+        if (subIssues.length === 0) {
+          logger.warn('Decomposed parent has no sub-issues', { parentIssue: parentIssue.number });
+          continue;
+        }
+
+        // Check if all sub-issues are completed
+        const allCompleted = subIssues.every(issue => {
+          const labels = issue.labels.map(l => l.name);
+          return labels.includes('completed');
+        });
+
+        if (allCompleted) {
+          logger.info('All sub-issues completed, closing parent', {
+            parentIssue: parentIssue.number,
+            subIssues: subIssues.length
+          });
+
+          // Create summary
+          const summary = `✅ **All Sub-Tasks Completed**\n\n` +
+            `This issue was decomposed into ${subIssues.length} sub-tasks, all of which have been completed:\n\n` +
+            subIssues.map(issue => `- ✅ #${issue.number} - ${issue.title}`).join('\n') +
+            `\n\nAll work has been completed and merged. Closing this parent issue.`;
+
+          // Close parent with summary
+          await this.githubClient.closeIssue(parentIssue.number, summary);
+
+          console.log(`✅ Closed decomposed parent #${parentIssue.number} (${subIssues.length} sub-tasks completed)`);
+        } else {
+          const completedCount = subIssues.filter(issue => {
+            const labels = issue.labels.map(l => l.name);
+            return labels.includes('completed');
+          }).length;
+
+          logger.debug('Parent waiting for sub-issue completion', {
+            parentIssue: parentIssue.number,
+            completed: completedCount,
+            total: subIssues.length
+          });
+        }
+      }
+    } catch (error: any) {
+      logger.error('Error checking parent completion', { error: error.message });
+    }
   }
 
   /**

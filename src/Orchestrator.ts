@@ -15,6 +15,7 @@ import { AgentRunner, AgentContext, AgentResult } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
 import { WikiClient } from './integrations/WikiClient';
+import { DecompositionManager } from './DecompositionManager';
 import { parseArchivistOutput, applySectionUpdate } from './utils/parseArchivistOutput';
 import { logger } from './utils/logger';
 
@@ -29,10 +30,13 @@ export interface TaskState {
   prUrl?: string;
   currentStage: number;
   stages: StageResult[];
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval' | 'awaiting_closure_approval';
+  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval' | 'awaiting_closure_approval' | 'decomposed';
   createdAt: string;
   updatedAt: string;
   error?: string;
+  isDecomposed?: boolean;
+  subIssues?: number[];      // Child issue numbers
+  parentIssue?: number;      // Parent issue number (for child tasks)
 }
 
 export interface StageResult {
@@ -62,6 +66,7 @@ export class Orchestrator {
   private githubClient: GitHubClient;
   private gitClient: GitClient;
   private wikiClient: WikiClient | null;
+  private decompositionManager: DecompositionManager;
   private tasksDir: string;
   private config: PipelineConfig;
 
@@ -76,6 +81,7 @@ export class Orchestrator {
     this.githubClient = githubClient;
     this.gitClient = gitClient;
     this.wikiClient = wikiClient;
+    this.decompositionManager = new DecompositionManager(githubClient, agentRunner);
     this.tasksDir = tasksDir;
 
     // Define the 14-stage pipeline (added Intake as Stage 0, Archivist as Stage 13)
@@ -656,6 +662,47 @@ export class Orchestrator {
         await this.requestMoreInformation(taskState);
         taskState.status = 'completed';
         return false;
+      }
+
+      // Check for issue decomposition (if enabled)
+      if (process.env.ENABLE_AUTO_DECOMPOSITION === 'true') {
+        try {
+          const shouldDecompose = await this.decompositionManager.analyzeForDecomposition(
+            taskState,
+            intakeOutput
+          );
+
+          if (shouldDecompose) {
+            logger.info('Issue complexity detected, initiating decomposition', {
+              taskId: taskState.taskId,
+              issueNumber: taskState.issueNumber
+            });
+
+            // Run decomposition
+            const subIssues = await this.decompositionManager.decomposeIssue(taskState);
+
+            // Mark parent as decomposed and halt
+            taskState.isDecomposed = true;
+            taskState.subIssues = subIssues;
+            taskState.status = 'decomposed';
+            this.saveTaskState(taskState);
+
+            logger.info('Issue decomposition complete', {
+              taskId: taskState.taskId,
+              parentIssue: taskState.issueNumber,
+              subIssues: subIssues,
+              count: subIssues.length
+            });
+
+            return false; // Don't halt for human approval, just complete this path
+          }
+        } catch (error: any) {
+          logger.error('Decomposition failed, continuing with parent issue', {
+            taskId: taskState.taskId,
+            error: error.message
+          });
+          // Graceful fallback - continue normal pipeline if decomposition fails
+        }
       }
     }
 

@@ -43,6 +43,17 @@ export declare class GitHubClient {
      */
     closeIssue(issueNumber: number, comment?: string): Promise<void>;
     /**
+     * Create a new issue
+     */
+    createIssue(title: string, body: string, labels?: string[]): Promise<{
+        number: number;
+        html_url: string;
+    }>;
+    /**
+     * Update issue body
+     */
+    updateIssueBody(issueNumber: number, body: string): Promise<void>;
+    /**
      * Create a pull request
      */
     createPullRequest(title: string, body: string, headBranch: string, baseBranch?: string, issueNumber?: number): Promise<{

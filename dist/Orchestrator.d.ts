@@ -23,10 +23,13 @@ export interface TaskState {
     prUrl?: string;
     currentStage: number;
     stages: StageResult[];
-    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval' | 'awaiting_closure_approval';
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'awaiting_approval' | 'awaiting_closure_approval' | 'decomposed';
     createdAt: string;
     updatedAt: string;
     error?: string;
+    isDecomposed?: boolean;
+    subIssues?: number[];
+    parentIssue?: number;
 }
 export interface StageResult {
     stageName: string;
@@ -53,6 +56,7 @@ export declare class Orchestrator {
     private githubClient;
     private gitClient;
     private wikiClient;
+    private decompositionManager;
     private tasksDir;
     private config;
     constructor(agentRunner: AgentRunner, githubClient: GitHubClient, gitClient: GitClient, wikiClient?: WikiClient | null, tasksDir?: string);

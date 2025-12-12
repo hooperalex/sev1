@@ -46,6 +46,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Orchestrator = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const DecompositionManager_1 = require("./DecompositionManager");
 const parseArchivistOutput_1 = require("./utils/parseArchivistOutput");
 const logger_1 = require("./utils/logger");
 class Orchestrator {
@@ -54,6 +55,7 @@ class Orchestrator {
         this.githubClient = githubClient;
         this.gitClient = gitClient;
         this.wikiClient = wikiClient;
+        this.decompositionManager = new DecompositionManager_1.DecompositionManager(githubClient, agentRunner);
         this.tasksDir = tasksDir;
         // Define the 14-stage pipeline (added Intake as Stage 0, Archivist as Stage 13)
         this.config = {
@@ -538,6 +540,39 @@ class Orchestrator {
                 await this.requestMoreInformation(taskState);
                 taskState.status = 'completed';
                 return false;
+            }
+            // Check for issue decomposition (if enabled)
+            if (process.env.ENABLE_AUTO_DECOMPOSITION === 'true') {
+                try {
+                    const shouldDecompose = await this.decompositionManager.analyzeForDecomposition(taskState, intakeOutput);
+                    if (shouldDecompose) {
+                        logger_1.logger.info('Issue complexity detected, initiating decomposition', {
+                            taskId: taskState.taskId,
+                            issueNumber: taskState.issueNumber
+                        });
+                        // Run decomposition
+                        const subIssues = await this.decompositionManager.decomposeIssue(taskState);
+                        // Mark parent as decomposed and halt
+                        taskState.isDecomposed = true;
+                        taskState.subIssues = subIssues;
+                        taskState.status = 'decomposed';
+                        this.saveTaskState(taskState);
+                        logger_1.logger.info('Issue decomposition complete', {
+                            taskId: taskState.taskId,
+                            parentIssue: taskState.issueNumber,
+                            subIssues: subIssues,
+                            count: subIssues.length
+                        });
+                        return false; // Don't halt for human approval, just complete this path
+                    }
+                }
+                catch (error) {
+                    logger_1.logger.error('Decomposition failed, continuing with parent issue', {
+                        taskId: taskState.taskId,
+                        error: error.message
+                    });
+                    // Graceful fallback - continue normal pipeline if decomposition fails
+                }
             }
         }
         // Check after Archaeologist (Stage 2) for consensus

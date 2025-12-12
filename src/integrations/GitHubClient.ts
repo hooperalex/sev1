@@ -169,6 +169,63 @@ export class GitHubClient {
   }
 
   /**
+   * Create a new issue
+   */
+  async createIssue(
+    title: string,
+    body: string,
+    labels?: string[]
+  ): Promise<{ number: number; html_url: string }> {
+    try {
+      logger.info('Creating GitHub issue', { title, labels });
+
+      const response = await this.octokit.issues.create({
+        owner: this.owner,
+        repo: this.repo,
+        title,
+        body,
+        labels: labels || []
+      });
+
+      logger.info('Issue created', {
+        number: response.data.number,
+        url: response.data.html_url
+      });
+
+      return {
+        number: response.data.number,
+        html_url: response.data.html_url
+      };
+
+    } catch (error: any) {
+      logger.error('Failed to create issue', { error: error.message });
+      throw new Error(`Failed to create issue: ${error.message}`);
+    }
+  }
+
+  /**
+   * Update issue body
+   */
+  async updateIssueBody(issueNumber: number, body: string): Promise<void> {
+    try {
+      logger.info('Updating issue body', { issueNumber });
+
+      await this.octokit.issues.update({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: issueNumber,
+        body
+      });
+
+      logger.info('Issue body updated', { issueNumber });
+
+    } catch (error: any) {
+      logger.error('Failed to update issue body', { error: error.message });
+      throw new Error(`Failed to update issue body: ${error.message}`);
+    }
+  }
+
+  /**
    * Create a pull request
    */
   async createPullRequest(
