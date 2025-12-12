@@ -10,6 +10,7 @@ import { AgentRunner } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
 import { WikiClient } from './integrations/WikiClient';
+import { VercelClient } from './integrations/VercelClient';
 import { Orchestrator } from './Orchestrator';
 import { logger } from './utils/logger';
 import * as fs from 'fs';
@@ -29,6 +30,7 @@ class IssueWatcher {
   private githubClient: GitHubClient;
   private gitClient: GitClient;
   private wikiClient: WikiClient | null;
+  private vercelClient: VercelClient | null;
   private orchestrator: Orchestrator;
   private state: WatcherState;
   private isRunning: boolean = false;
@@ -62,6 +64,19 @@ class IssueWatcher {
       logger.warn('Wiki configuration not found, running without wiki integration');
     }
 
+    // Initialize VercelClient if configuration is available
+    if (process.env.VERCEL_TOKEN && process.env.VERCEL_PROJECT_ID && process.env.VERCEL_ORG_ID) {
+      this.vercelClient = new VercelClient(
+        process.env.VERCEL_TOKEN,
+        process.env.VERCEL_PROJECT_ID,
+        process.env.VERCEL_ORG_ID
+      );
+      logger.info('VercelClient initialized');
+    } else {
+      this.vercelClient = null;
+      logger.info('Vercel configuration not found, running without Vercel integration');
+    }
+
     const agentRunner = new AgentRunner(
       process.env.ANTHROPIC_API_KEY!,
       './.claude/agents',
@@ -73,6 +88,7 @@ class IssueWatcher {
       this.githubClient,
       this.gitClient,
       this.wikiClient,
+      this.vercelClient,
       './tasks'
     );
 

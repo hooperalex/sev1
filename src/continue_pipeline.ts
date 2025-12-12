@@ -52,6 +52,7 @@ async function main() {
       githubClient,
       gitClient,
       null,  // No wiki client
+      null,  // No vercel client
       './tasks'
     );
 

@@ -15,6 +15,7 @@ import { AgentRunner, AgentContext, AgentResult } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
 import { WikiClient } from './integrations/WikiClient';
+import { VercelClient } from './integrations/VercelClient';
 import { DecompositionManager } from './DecompositionManager';
 import { parseArchivistOutput, applySectionUpdate } from './utils/parseArchivistOutput';
 import { logger } from './utils/logger';
@@ -37,6 +38,20 @@ export interface TaskState {
   isDecomposed?: boolean;
   subIssues?: number[];      // Child issue numbers
   parentIssue?: number;      // Parent issue number (for child tasks)
+  stagingDeployment?: {
+    deploymentId: string;
+    deploymentUrl: string;
+    status: 'BUILDING' | 'ERROR' | 'INITIALIZING' | 'QUEUED' | 'READY' | 'CANCELED';
+    deployedAt: string;
+    healthy: boolean;
+  };
+  productionDeployment?: {
+    deploymentId: string;
+    deploymentUrl: string;
+    status: 'BUILDING' | 'ERROR' | 'INITIALIZING' | 'QUEUED' | 'READY' | 'CANCELED';
+    deployedAt: string;
+    healthy: boolean;
+  };
 }
 
 export interface StageResult {
@@ -66,6 +81,7 @@ export class Orchestrator {
   private githubClient: GitHubClient;
   private gitClient: GitClient;
   private wikiClient: WikiClient | null;
+  private vercelClient: VercelClient | null;
   private decompositionManager: DecompositionManager;
   private tasksDir: string;
   private config: PipelineConfig;
@@ -75,12 +91,14 @@ export class Orchestrator {
     githubClient: GitHubClient,
     gitClient: GitClient,
     wikiClient: WikiClient | null = null,
+    vercelClient: VercelClient | null = null,
     tasksDir: string = './tasks'
   ) {
     this.agentRunner = agentRunner;
     this.githubClient = githubClient;
     this.gitClient = gitClient;
     this.wikiClient = wikiClient;
+    this.vercelClient = vercelClient;
     this.decompositionManager = new DecompositionManager(githubClient, agentRunner);
     this.tasksDir = tasksDir;
 
@@ -262,6 +280,16 @@ export class Orchestrator {
       // Step 4: After Archivist completes, update wiki with documented insights
       if (stageIndex === 13 && stageConfig.agentName === 'archivist' && this.wikiClient) {
         await this.processArchivistUpdates(taskState, result.output);
+      }
+
+      // Step 5: After Gatekeeper completes, deploy to Vercel staging
+      if (stageIndex === 7 && stageConfig.agentName === 'gatekeeper') {
+        await this.deployStagingToVercel(taskState);
+      }
+
+      // Step 6: After Commander completes, deploy to Vercel production
+      if (stageIndex === 10 && stageConfig.agentName === 'commander') {
+        await this.deployProductionToVercel(taskState);
       }
 
       // Check if approval is required
@@ -1048,6 +1076,247 @@ export class Orchestrator {
       });
       // Don't throw - wiki update failure shouldn't break the pipeline
       // Just log and continue
+    }
+  }
+
+  /**
+   * Deploy to Vercel staging after Gatekeeper (Stage 7) completes
+   */
+  private async deployStagingToVercel(taskState: TaskState): Promise<void> {
+    if (!this.vercelClient) {
+      logger.info('Vercel not configured, skipping staging deployment');
+      return;
+    }
+
+    try {
+      logger.info('Starting Vercel staging deployment', {
+        taskId: taskState.taskId,
+        branch: taskState.branchName
+      });
+
+      // Notify GitHub
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `🚀 **Deploying to Vercel Staging**\n\nBranch: \`${taskState.branchName}\`\nTriggering deployment...`
+      );
+
+      // 1. Create deployment
+      const deployment = await this.vercelClient.createDeployment(
+        taskState.branchName,
+        'staging'
+      );
+
+      logger.info('Staging deployment created', {
+        deploymentId: deployment.id,
+        url: deployment.url
+      });
+
+      // 2. Wait for deployment to be ready (10 minute timeout)
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `⏳ Waiting for deployment to complete...\nDeployment ID: \`${deployment.id}\``
+      );
+
+      const readyDeployment = await this.vercelClient.waitForDeployment(deployment.id);
+
+      // 3. Get logs
+      const logs = await this.vercelClient.getDeploymentLogs(deployment.id);
+
+      // 4. Health check
+      const health = await this.vercelClient.checkDeploymentHealth(readyDeployment.url);
+
+      // 5. Store deployment info
+      taskState.stagingDeployment = {
+        deploymentId: readyDeployment.id,
+        deploymentUrl: readyDeployment.url,
+        status: readyDeployment.readyState,
+        deployedAt: new Date().toISOString(),
+        healthy: health.healthy
+      };
+      this.saveTaskState(taskState);
+
+      // 6. Append deployment info to staging-deployment.md artifact
+      const stageResult = taskState.stages[7]; // Stage 7 = Gatekeeper
+      if (stageResult && stageResult.artifactPath) {
+        const artifactPath = path.join(this.tasksDir, taskState.taskId, stageResult.artifactPath);
+        const deploymentInfo = `
+
+---
+
+## 🚀 Actual Vercel Deployment
+
+**Deployment ID:** \`${readyDeployment.id}\`
+**Deployment URL:** ${readyDeployment.url}
+**Status:** ${readyDeployment.readyState} ${health.healthy ? '✅' : '❌'}
+**Deployed At:** ${taskState.stagingDeployment!.deployedAt}
+
+**Health Check:**
+- HTTP Status: ${health.statusCode}
+- Response Time: ${health.responseTime}ms
+- Healthy: ${health.healthy ? 'Yes ✅' : 'No ❌'}
+
+**Build Logs (Last 10 lines):**
+\`\`\`
+${logs.logs.slice(-10).map(l => l.message).join('\n')}
+\`\`\`
+`;
+
+        fs.appendFileSync(artifactPath, deploymentInfo, 'utf-8');
+        logger.info('Appended deployment info to artifact', { artifactPath });
+      }
+
+      // 7. Notify GitHub with success
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `✅ **Staging Deployment Complete**\n\n` +
+        `🌐 **URL:** ${readyDeployment.url}\n` +
+        `📊 **Status:** ${readyDeployment.readyState}\n` +
+        `❤️ **Health:** ${health.healthy ? 'Healthy' : 'Unhealthy'} (${health.statusCode})\n` +
+        `⏱️ **Response Time:** ${health.responseTime}ms`
+      );
+
+      logger.info('Staging deployment successful', {
+        deploymentId: readyDeployment.id,
+        url: readyDeployment.url,
+        healthy: health.healthy
+      });
+
+    } catch (error: any) {
+      logger.error('Staging deployment failed', {
+        taskId: taskState.taskId,
+        error: error.message
+      });
+
+      // Notify GitHub of failure
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `❌ **Staging Deployment Failed**\n\n` +
+        `Error: ${error.message}\n\n` +
+        `The pipeline will continue, but staging deployment was unsuccessful.`
+      );
+
+      // Don't throw - staging failures shouldn't block the pipeline
+    }
+  }
+
+  /**
+   * Deploy to Vercel production after Commander (Stage 10) completes
+   */
+  private async deployProductionToVercel(taskState: TaskState): Promise<void> {
+    if (!this.vercelClient) {
+      logger.info('Vercel not configured, skipping production deployment');
+      return;
+    }
+
+    try {
+      logger.info('Starting Vercel production deployment', {
+        taskId: taskState.taskId,
+        branch: taskState.branchName
+      });
+
+      // Notify GitHub
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `🚀 **Deploying to Vercel Production**\n\nBranch: \`${taskState.branchName}\`\nTriggering deployment...`
+      );
+
+      // 1. Create deployment
+      const deployment = await this.vercelClient.createDeployment(
+        taskState.branchName,
+        'production'
+      );
+
+      logger.info('Production deployment created', {
+        deploymentId: deployment.id,
+        url: deployment.url
+      });
+
+      // 2. Wait for deployment to be ready
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `⏳ Waiting for production deployment...\nDeployment ID: \`${deployment.id}\``
+      );
+
+      const readyDeployment = await this.vercelClient.waitForDeployment(deployment.id);
+
+      // 3. Get logs
+      const logs = await this.vercelClient.getDeploymentLogs(deployment.id);
+
+      // 4. Health check
+      const health = await this.vercelClient.checkDeploymentHealth(readyDeployment.url);
+
+      // 5. Store deployment info
+      taskState.productionDeployment = {
+        deploymentId: readyDeployment.id,
+        deploymentUrl: readyDeployment.url,
+        status: readyDeployment.readyState,
+        deployedAt: new Date().toISOString(),
+        healthy: health.healthy
+      };
+      this.saveTaskState(taskState);
+
+      // 6. Append deployment info to deployment-log.md artifact
+      const stageResult = taskState.stages[10]; // Stage 10 = Commander
+      if (stageResult && stageResult.artifactPath) {
+        const artifactPath = path.join(this.tasksDir, taskState.taskId, stageResult.artifactPath);
+        const deploymentInfo = `
+
+---
+
+## 🚀 Actual Vercel Production Deployment
+
+**Deployment ID:** \`${readyDeployment.id}\`
+**Deployment URL:** ${readyDeployment.url}
+**Status:** ${readyDeployment.readyState} ${health.healthy ? '✅' : '❌'}
+**Deployed At:** ${taskState.productionDeployment!.deployedAt}
+
+**Health Check:**
+- HTTP Status: ${health.statusCode}
+- Response Time: ${health.responseTime}ms
+- Healthy: ${health.healthy ? 'Yes ✅' : 'No ❌'}
+
+**Build Logs (Last 10 lines):**
+\`\`\`
+${logs.logs.slice(-10).map(l => l.message).join('\n')}
+\`\`\`
+`;
+
+        fs.appendFileSync(artifactPath, deploymentInfo, 'utf-8');
+        logger.info('Appended deployment info to artifact', { artifactPath });
+      }
+
+      // 7. Notify GitHub with success
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `✅ **Production Deployment Complete**\n\n` +
+        `🌐 **URL:** ${readyDeployment.url}\n` +
+        `📊 **Status:** ${readyDeployment.readyState}\n` +
+        `❤️ **Health:** ${health.healthy ? 'Healthy' : 'Unhealthy'} (${health.statusCode})\n` +
+        `⏱️ **Response Time:** ${health.responseTime}ms`
+      );
+
+      logger.info('Production deployment successful', {
+        deploymentId: readyDeployment.id,
+        url: readyDeployment.url,
+        healthy: health.healthy
+      });
+
+    } catch (error: any) {
+      logger.error('Production deployment failed', {
+        taskId: taskState.taskId,
+        error: error.message
+      });
+
+      // Notify GitHub of failure
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `❌ **Production Deployment Failed**\n\n` +
+        `Error: ${error.message}\n\n` +
+        `This is a critical failure. Manual intervention required.`
+      );
+
+      // Production failures SHOULD block the pipeline
+      throw new Error(`Production deployment failed: ${error.message}`);
     }
   }
 }
