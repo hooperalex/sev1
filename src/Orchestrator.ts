@@ -20,12 +20,20 @@ import { DecompositionManager } from './DecompositionManager';
 import { parseArchivistOutput, applySectionUpdate } from './utils/parseArchivistOutput';
 import { logger } from './utils/logger';
 
+export interface IssueComment {
+  user: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface TaskState {
   taskId: string;
   issueNumber: number;
   issueTitle: string;
   issueBody: string;
   issueUrl: string;
+  issueComments: IssueComment[];
+  issueLabels: string[];
   branchName: string;
   prNumber?: number;
   prUrl?: string;
@@ -134,8 +142,35 @@ export class Orchestrator {
   async startTask(issueNumber: number): Promise<TaskState> {
     logger.info('Starting new task', { issueNumber });
 
-    // Fetch GitHub issue
-    const issue = await this.githubClient.getIssue(issueNumber);
+    // Fetch GitHub issue with comments
+    const { issue, comments } = await this.githubClient.getIssueWithComments(issueNumber);
+
+    // Convert comments to our format
+    const issueComments: IssueComment[] = comments.map(c => ({
+      user: c.user.login,
+      body: c.body,
+      createdAt: c.created_at
+    }));
+
+    // Extract labels
+    const issueLabels = issue.labels.map(l => l.name);
+
+    // Detect resume stage from labels (e.g., "stage-4" means resume from stage 4)
+    let resumeStage = 0;
+    const stageLabel = issueLabels.find(l => l.match(/^stage-(\d+)$/));
+    if (stageLabel) {
+      const match = stageLabel.match(/^stage-(\d+)$/);
+      if (match) {
+        // Stage labels are 1-indexed, internal stages are 0-indexed
+        // If failed at stage-4, we want to resume FROM stage 3 (0-indexed)
+        resumeStage = Math.max(0, parseInt(match[1], 10) - 1);
+        logger.info('Detected previous run, resuming from stage', { stageLabel, resumeStage });
+      }
+    }
+
+    // Check if this is a re-run (has 'failed' label or previous comments from agents)
+    const isRerun = issueLabels.includes('failed') ||
+                    comments.some(c => c.user.login === 'github-actions[bot]');
 
     // Create branch name (sanitize issue title for branch name)
     const branchName = `fix/issue-${issueNumber}-${issue.title
@@ -152,12 +187,15 @@ export class Orchestrator {
       issueTitle: issue.title,
       issueBody: issue.body || 'No description provided',
       issueUrl: issue.html_url,
+      issueComments,
+      issueLabels,
       branchName,
-      currentStage: 0,
-      stages: this.config.stages.map(stage => ({
+      currentStage: resumeStage,
+      stages: this.config.stages.map((stage, index) => ({
         stageName: stage.name,
         agentName: stage.agentName,
-        status: 'pending'
+        // Mark previous stages as skipped on resume
+        status: index < resumeStage ? 'skipped' : 'pending'
       })),
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -167,25 +205,43 @@ export class Orchestrator {
     // Save initial state
     this.saveTaskState(taskState);
 
-    // Step 1: Create Git branch for this issue
+    // Step 1: Create Git branch for this issue (or use existing)
     logger.info('Creating Git branch', { branchName });
     try {
       await this.gitClient.createBranch(branchName);
       logger.info('Branch created successfully', { branchName });
 
-      // Comment on issue about branch creation
-      await this.githubClient.addComment(
-        issueNumber,
-        `🌿 **Branch Created**\n\n` +
-        `Created branch \`${branchName}\` for this issue.\n\n` +
-        `The AI team will now begin working on the fix...`
-      );
+      // Only comment on new runs, not re-runs
+      if (!isRerun) {
+        await this.githubClient.addComment(
+          issueNumber,
+          `🌿 **Branch Created**\n\n` +
+          `Created branch \`${branchName}\` for this issue.\n\n` +
+          `The AI team will now begin working on the fix...`
+        );
+      } else {
+        await this.githubClient.addComment(
+          issueNumber,
+          `🔄 **Pipeline Resumed**\n\n` +
+          `Resuming from Stage ${resumeStage + 1} on branch \`${branchName}\`.\n\n` +
+          `Previous comments and context have been loaded.`
+        );
+      }
     } catch (error: any) {
       logger.error('Failed to create branch', { branchName, error: error.message });
       throw new Error(`Failed to create branch: ${error.message}`);
     }
 
-    logger.info('Task created', { taskId, issueTitle: issue.title, branchName });
+    // Remove 'failed' label on re-run
+    if (issueLabels.includes('failed')) {
+      try {
+        await this.githubClient.removeLabel(issueNumber, 'failed');
+      } catch (e) {
+        // Ignore if label removal fails
+      }
+    }
+
+    logger.info('Task created', { taskId, issueTitle: issue.title, branchName, isRerun, resumeStage });
 
     return taskState;
   }
@@ -400,17 +456,27 @@ export class Orchestrator {
    * Build agent context from task state and previous outputs
    */
   private buildAgentContext(taskState: TaskState, stageIndex: number): AgentContext {
+    // Format comments as readable text for agents
+    let formattedComments = '';
+    if (taskState.issueComments && taskState.issueComments.length > 0) {
+      formattedComments = taskState.issueComments.map(c =>
+        `[${c.createdAt}] @${c.user}:\n${c.body}`
+      ).join('\n\n---\n\n');
+    }
+
     const context: AgentContext = {
       issueNumber: taskState.issueNumber,
       issueTitle: taskState.issueTitle,
       issueBody: taskState.issueBody,
-      issueUrl: taskState.issueUrl
+      issueUrl: taskState.issueUrl,
+      issueComments: formattedComments,
+      issueLabels: taskState.issueLabels?.join(', ') || ''
     };
 
-    // Add outputs from previous stages
+    // Add outputs from previous stages (including skipped stages that have output)
     for (let i = 0; i < stageIndex; i++) {
       const previousStage = taskState.stages[i];
-      if (previousStage.status === 'completed' && previousStage.output) {
+      if ((previousStage.status === 'completed' || previousStage.status === 'skipped') && previousStage.output) {
         const key = `${previousStage.agentName}Output`;
         (context as any)[key] = previousStage.output;
       }

@@ -290,8 +290,23 @@ export class AgentRunner {
     if (context.issueTitle) {
       prompt += `Issue Title: ${context.issueTitle}\n`;
     }
+    if (context.issueLabels) {
+      prompt += `Labels: ${context.issueLabels}\n`;
+    }
     if (context.issueBody) {
       prompt += `\nIssue Description:\n${context.issueBody}\n`;
+    }
+
+    // Add issue comments (conversation history)
+    if (context.issueComments && context.issueComments.length > 0) {
+      prompt += `\n${'='.repeat(60)}\n`;
+      prompt += `ISSUE COMMENTS (Conversation History):\n`;
+      prompt += `${'='.repeat(60)}\n`;
+      prompt += `${context.issueComments}\n`;
+      prompt += `\nNOTE: Above are previous comments on this issue. Review them for:\n`;
+      prompt += `- Human feedback or clarifications\n`;
+      prompt += `- Previous agent analysis (don't repeat the same analysis)\n`;
+      prompt += `- Any additional context provided\n`;
     }
 
     // Add wiki summary if available
@@ -321,6 +336,7 @@ export class AgentRunner {
     // Add any other context fields
     const standardFields = [
       'issueUrl', 'issueNumber', 'issueTitle', 'issueBody',
+      'issueComments', 'issueLabels',
       'previousOutput', 'taskId', 'wikiSummary', 'wikiSearchResults'
     ];
     const customFields = Object.keys(context).filter(k => !standardFields.includes(k));

@@ -15,6 +15,15 @@ export interface GitHubIssue {
   updated_at: string;
 }
 
+export interface GitHubComment {
+  id: number;
+  body: string;
+  user: {
+    login: string;
+  };
+  created_at: string;
+}
+
 export class GitHubClient {
   private octokit: Octokit;
   private owner: string;
@@ -47,6 +56,48 @@ export class GitHubClient {
       logger.error(`Failed to fetch issue #${issueNumber}`, { error: error.message });
       throw new Error(`Failed to fetch GitHub issue: ${error.message}`);
     }
+  }
+
+  /**
+   * Get all comments on an issue
+   */
+  async getIssueComments(issueNumber: number): Promise<GitHubComment[]> {
+    try {
+      logger.info(`Fetching comments for issue #${issueNumber}`);
+
+      const response = await this.octokit.issues.listComments({
+        owner: this.owner,
+        repo: this.repo,
+        issue_number: issueNumber,
+        per_page: 100
+      });
+
+      logger.info(`Fetched ${response.data.length} comments for issue #${issueNumber}`);
+
+      return response.data.map(comment => ({
+        id: comment.id,
+        body: comment.body || '',
+        user: {
+          login: comment.user?.login || 'unknown'
+        },
+        created_at: comment.created_at
+      }));
+
+    } catch (error: any) {
+      logger.error(`Failed to fetch comments for #${issueNumber}`, { error: error.message });
+      return []; // Return empty array on error, don't fail the pipeline
+    }
+  }
+
+  /**
+   * Get issue with all comments (combined fetch)
+   */
+  async getIssueWithComments(issueNumber: number): Promise<{ issue: GitHubIssue; comments: GitHubComment[] }> {
+    const [issue, comments] = await Promise.all([
+      this.getIssue(issueNumber),
+      this.getIssueComments(issueNumber)
+    ]);
+    return { issue, comments };
   }
 
   /**
