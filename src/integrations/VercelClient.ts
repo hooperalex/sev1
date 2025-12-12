@@ -450,9 +450,12 @@ export class VercelClient {
       return this.createFailedReport('No production deployment found');
     }
 
-    const baseUrl = production.url.startsWith('http')
-      ? production.url
-      : `https://${production.url}`;
+    // Prefer project domain over deployment-specific URL (avoids auth protection)
+    const domains = await this.getProjectDomains();
+    const primaryDomain = domains.length > 0 ? domains[0] : production.url;
+    const baseUrl = primaryDomain.startsWith('http')
+      ? primaryDomain
+      : `https://${primaryDomain}`;
 
     const report: ProductionHealthReport = {
       overall: 'HEALTHY',
@@ -637,9 +640,12 @@ export class VercelClient {
         return { status: 'UNKNOWN', url: null, lastDeployed: null, responseTime: null };
       }
 
-      const url = production.url.startsWith('http')
-        ? production.url
-        : `https://${production.url}`;
+      // Prefer project domain over deployment-specific URL (avoids auth protection)
+      const domains = await this.getProjectDomains();
+      const primaryDomain = domains.length > 0 ? domains[0] : production.url;
+      const url = primaryDomain.startsWith('http')
+        ? primaryDomain
+        : `https://${primaryDomain}`;
 
       const health = await this.checkDeploymentHealth(url);
 
