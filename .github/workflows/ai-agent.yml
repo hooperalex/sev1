@@ -1,0 +1,81 @@
+name: AI Agent Pipeline
+
+on:
+  issues:
+    types: [opened, labeled]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to process'
+        required: true
+        type: number
+
+# Prevent multiple runs for same issue
+concurrency:
+  group: ai-agent-issue-${{ github.event.issue.number || inputs.issue_number }}
+  cancel-in-progress: false
+
+jobs:
+  process-issue:
+    runs-on: ubuntu-latest
+    # Only run if issue is opened OR has 'ai-fix' label
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      github.event.action == 'opened' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'ai-fix')
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Configure Git
+        run: |
+          git config user.name "AI Agent"
+          git config user.email "ai-agent@users.noreply.github.com"
+
+      - name: Process Issue
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          ISSUE_NUM="${{ github.event.issue.number || inputs.issue_number }}"
+          echo "Processing issue #${ISSUE_NUM}"
+          npx ts-node src/scripts/process_single_issue.ts ${ISSUE_NUM}
+
+      - name: Comment on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueNumber = context.issue?.number || ${{ inputs.issue_number || 0 }};
+            if (issueNumber) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body: '## AI Agent Failed\n\nThe automated fix attempt encountered an error. Please check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.\n\nA human developer may need to investigate this issue.'
+              });
+            }
