@@ -126,7 +126,7 @@ export class AgentRunner {
           temperature: 0.3,
           tools: tools,
           messages: messages
-        });
+        } as any);
 
         totalTokens += response.usage.input_tokens + response.usage.output_tokens;
 

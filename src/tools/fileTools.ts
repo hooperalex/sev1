@@ -5,12 +5,10 @@
  * These tools enable agents (especially Surgeon) to read and write code files.
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-
 /**
  * Tool definitions for Claude API
  */
-export const FILE_OPERATION_TOOLS: Anthropic.Tool[] = [
+export const FILE_OPERATION_TOOLS: any[] = [
   {
     name: 'read_file',
     description: 'Read the contents of a file. Use this to examine existing code before making changes. Returns the complete file content as a string.',

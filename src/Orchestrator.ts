@@ -763,38 +763,20 @@ export class Orchestrator {
 
   /**
    * Check if pipeline should halt based on agent consensus
-   * Only flags human for high-risk decisions, auto-closes low-risk issues
+   * NEVER blocks - pipeline always continues automatically
    */
   private async checkForEarlyTermination(taskState: TaskState, currentStageIndex: number): Promise<boolean> {
-    // Check after Intake (Stage 0)
+    // NEVER halt the pipeline - always continue automatically
+    // Log decisions for visibility but don't block
+
     if (currentStageIndex === 0) {
       const intakeOutput = taskState.stages[0].output || '';
       const intakeDecision = this.extractDecision(intakeOutput);
 
-      // Auto-close clear invalid issues without human approval
-      if (intakeDecision === 'CLOSE') {
-        const requiresQualityScore = this.extractRequirementsQuality(intakeOutput);
-        if (requiresQualityScore !== null && requiresQualityScore < 40) {
-          // Very low quality - auto-close without human
-          logger.info('Auto-closing low quality issue', { taskId: taskState.taskId, score: requiresQualityScore });
-          await this.autoCloseIssue(taskState, 'Low quality - missing requirements');
-          taskState.status = 'completed';
-          return false; // Don't halt, just complete
-        }
-      }
-
-      // Request human approval only for edge cases
-      if (intakeDecision === 'REQUEST_APPROVAL') {
-        logger.info('Feature request requires stakeholder approval', { taskId: taskState.taskId });
-        return true; // Halt for human approval
-      }
-
-      if (intakeDecision === 'NEEDS_MORE_INFO') {
-        // Auto-request more info without halting
-        await this.requestMoreInformation(taskState);
-        taskState.status = 'completed';
-        return false;
-      }
+      logger.info('Intake decision (continuing automatically)', {
+        taskId: taskState.taskId,
+        decision: intakeDecision
+      });
 
       // Check for issue decomposition (if enabled)
       if (process.env.ENABLE_AUTO_DECOMPOSITION === 'true') {
@@ -813,7 +795,7 @@ export class Orchestrator {
             // Run decomposition
             const subIssues = await this.decompositionManager.decomposeIssue(taskState);
 
-            // Mark parent as decomposed and halt
+            // Mark parent as decomposed
             taskState.isDecomposed = true;
             taskState.subIssues = subIssues;
             taskState.status = 'decomposed';
@@ -826,45 +808,18 @@ export class Orchestrator {
               count: subIssues.length
             });
 
-            return false; // Don't halt for human approval, just complete this path
+            return false;
           }
         } catch (error: any) {
           logger.error('Decomposition failed, continuing with parent issue', {
             taskId: taskState.taskId,
             error: error.message
           });
-          // Graceful fallback - continue normal pipeline if decomposition fails
         }
       }
     }
 
-    // Check after Archaeologist (Stage 2) for consensus
-    // Only halt if there's DISAGREEMENT, not consensus
-    if (currentStageIndex === 2) {
-      const intakeOutput = taskState.stages[0]?.output || '';
-      const detectiveOutput = taskState.stages[1]?.output || '';
-      const archaeologistOutput = taskState.stages[2]?.output || '';
-
-      const intakeDecision = this.extractDecision(intakeOutput);
-      const detectiveRecommendsClosure = detectiveOutput.includes('NOT A BUG') || detectiveOutput.includes('CLOSE');
-      const archaeologistRecommendsClosure = archaeologistOutput.includes('NOT A BUG') || archaeologistOutput.includes('PROCESS FAILURE');
-
-      // If all 3 agree to close - auto-close (consensus)
-      if (intakeDecision === 'CLOSE' && detectiveRecommendsClosure && archaeologistRecommendsClosure) {
-        logger.info('All agents agree to close - auto-closing', { taskId: taskState.taskId });
-        await this.autoCloseIssue(taskState, 'Agent consensus - not a bug');
-        taskState.status = 'completed';
-        return false;
-      }
-
-      // If there's disagreement - flag for human (edge case)
-      const closureCount = [intakeDecision === 'CLOSE', detectiveRecommendsClosure, archaeologistRecommendsClosure].filter(Boolean).length;
-      if (closureCount >= 1 && closureCount < 3) {
-        logger.info('Agent disagreement detected - flagging for human review', { taskId: taskState.taskId, closureCount });
-        return true; // Halt for human decision
-      }
-    }
-
+    // Never halt - always return false
     return false;
   }
 
