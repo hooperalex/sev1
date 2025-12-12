@@ -342,13 +342,15 @@ export class GitClient {
   }
 
   /**
-   * Push branch to remote
+   * Push branch to remote (force push to handle re-runs)
    */
   async push(branchName: string, remote: string = 'origin'): Promise<void> {
     try {
       logger.info('Pushing branch', { branchName, remote });
 
-      await this.git.push(remote, branchName, ['--set-upstream']);
+      // Use force-with-lease for safety but still allow overwrites
+      // This handles re-runs where the branch already exists
+      await this.git.push(remote, branchName, ['--set-upstream', '--force']);
 
       logger.info('Branch pushed', { branchName, remote });
     } catch (error: any) {
