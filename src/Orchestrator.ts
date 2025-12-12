@@ -416,7 +416,107 @@ export class Orchestrator {
       }
     }
 
+    // Add production deployment info if available
+    if (taskState.productionDeployment) {
+      (context as any).productionDeployment = taskState.productionDeployment;
+    }
+
     return context;
+  }
+
+  /**
+   * Run production health checks and return formatted report
+   */
+  async runProductionHealthChecks(): Promise<string> {
+    if (!this.vercelClient) {
+      return 'Vercel not configured - unable to run production health checks';
+    }
+
+    try {
+      const report = await this.vercelClient.runProductionHealthChecks({
+        endpoints: [
+          { path: '/' },
+          { path: '/api/health', expectedStatus: 200 }
+        ],
+        responseTimeThreshold: 3000
+      });
+
+      // Format the report for the agent
+      let formattedReport = `## Production Health Check Results\n\n`;
+      formattedReport += `**Overall Status:** ${report.overall}\n`;
+      formattedReport += `**Timestamp:** ${report.timestamp}\n`;
+      formattedReport += `**Deployment ID:** ${report.deploymentId}\n`;
+      formattedReport += `**Deployment URL:** ${report.deploymentUrl}\n\n`;
+
+      formattedReport += `### Checks Summary\n`;
+      formattedReport += `- Total: ${report.summary.totalChecks}\n`;
+      formattedReport += `- Passed: ${report.summary.passed}\n`;
+      formattedReport += `- Failed: ${report.summary.failed}\n`;
+      formattedReport += `- Warnings: ${report.summary.warnings}\n\n`;
+
+      formattedReport += `### DNS Check\n`;
+      formattedReport += `- Resolved: ${report.checks.dns.resolved ? 'Yes ✅' : 'No ❌'}\n`;
+      if (report.checks.dns.error) {
+        formattedReport += `- Error: ${report.checks.dns.error}\n`;
+      }
+      formattedReport += `\n`;
+
+      formattedReport += `### SSL Check\n`;
+      formattedReport += `- Valid: ${report.checks.ssl.valid ? 'Yes ✅' : 'No ❌'}\n`;
+      if (report.checks.ssl.error) {
+        formattedReport += `- Error: ${report.checks.ssl.error}\n`;
+      }
+      formattedReport += `\n`;
+
+      formattedReport += `### Endpoint Checks\n`;
+      for (const ep of report.checks.endpoints) {
+        formattedReport += `- **${ep.endpoint}**\n`;
+        formattedReport += `  - Status: ${ep.healthy ? 'Healthy ✅' : 'Unhealthy ❌'}\n`;
+        formattedReport += `  - HTTP Status: ${ep.statusCode}\n`;
+        formattedReport += `  - Response Time: ${ep.responseTime}ms\n`;
+        if (ep.error) {
+          formattedReport += `  - Error: ${ep.error}\n`;
+        }
+      }
+      formattedReport += `\n`;
+
+      formattedReport += `### Response Time Metrics\n`;
+      formattedReport += `- Average: ${report.checks.responseTime.avg}ms\n`;
+      formattedReport += `- Maximum: ${report.checks.responseTime.max}ms\n`;
+      formattedReport += `- Acceptable: ${report.checks.responseTime.acceptable ? 'Yes ✅' : 'No ⚠️'}\n\n`;
+
+      if (report.recommendations.length > 0) {
+        formattedReport += `### Recommendations\n`;
+        for (const rec of report.recommendations) {
+          formattedReport += `- ${rec}\n`;
+        }
+      }
+
+      return formattedReport;
+    } catch (error: any) {
+      logger.error('Failed to run production health checks', { error: error.message });
+      return `Production health check failed: ${error.message}`;
+    }
+  }
+
+  /**
+   * Get quick production status
+   */
+  async getProductionStatus(): Promise<{ status: string; url: string | null; details: string }> {
+    if (!this.vercelClient) {
+      return { status: 'UNKNOWN', url: null, details: 'Vercel not configured' };
+    }
+
+    try {
+      const status = await this.vercelClient.getProductionStatus();
+      return {
+        status: status.status,
+        url: status.url,
+        details: `Last deployed: ${status.lastDeployed || 'unknown'}, Response time: ${status.responseTime || 'N/A'}ms`
+      };
+    } catch (error: any) {
+      return { status: 'ERROR', url: null, details: error.message };
+    }
   }
 
   /**

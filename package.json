@@ -14,6 +14,7 @@
     "test:pipeline": "ts-node src/test_pipeline.ts",
     "test:full": "ts-node src/test_full_pipeline.ts",
     "test:github": "ts-node src/test_github_integration.ts",
+    "test:vercel": "ts-node src/test_vercel_production.ts",
     "continue": "ts-node src/continue_pipeline.ts",
     "cleanup": "ts-node src/cleanup_task.ts",
     "approve-closure": "ts-node src/approve_closure.ts",
