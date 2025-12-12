@@ -4,11 +4,11 @@
 
 ## What This Does
 
-The system **continuously monitors your GitHub repository** and automatically processes issues through a 12-stage AI pipeline:
+The system **continuously monitors your GitHub repository** and automatically processes issues through a 14-stage AI pipeline:
 
-Create GitHub issue → AI agents triage, analyze, code, review, test, and deploy → Bug fixed in production → PR created with full documentation
+Create GitHub issue → AI agents validate, triage, analyze, code, review, test, deploy, and document → Bug fixed in production → PR created with full documentation
 
-**Current Status:** ✅ All 12 agents complete. Full pipeline operational. Automated issue monitoring active.
+**Current Status:** ✅ All 14 agents complete. Full pipeline operational. Automated issue monitoring active.
 
 ---
 
@@ -45,7 +45,7 @@ npm run watch:issues
 **What happens:**
 - Checks for new GitHub issues every 30 seconds
 - Automatically processes up to 3 issues concurrently
-- Each issue goes through all 12 agents
+- Each issue goes through all 14 agents
 - Creates branches, commits code, and opens PRs
 - Comments on issues with progress updates
 - No manual intervention needed (unless an error occurs)
@@ -95,7 +95,7 @@ User-facing issue affecting homepage visibility, but website remains functional.
 If you want to process a specific issue manually:
 
 ```bash
-# Run full 12-stage pipeline on a single issue
+# Run full 14-stage pipeline on a single issue
 npm run test:full -- <issue-number>
 
 # Continue a paused/failed pipeline
@@ -165,10 +165,20 @@ ai-team-mvp/
 │
 ├── .claude/
 │   └── agents/
+│       ├── intake.md               # ✅ Stage 0: Requirements validation
 │       ├── detective.md            # ✅ Stage 1: Bug triage
 │       ├── archaeologist.md        # ✅ Stage 2: Root cause analysis
-│       ├── surgeon.md              # 📋 Stage 3: Implementation (TODO)
-│       └── ... (9 more agents)
+│       ├── surgeon.md              # ✅ Stage 3: Implementation
+│       ├── critic.md               # ✅ Stage 4: Code review
+│       ├── validator.md            # ✅ Stage 5: Testing
+│       ├── skeptic.md              # ✅ Stage 6: QA
+│       ├── gatekeeper.md           # ✅ Stage 7: Staging deployment
+│       ├── advocate.md             # ✅ Stage 8: UAT
+│       ├── planner.md              # ✅ Stage 9: Production planning
+│       ├── commander.md            # ✅ Stage 10: Production deployment
+│       ├── guardian.md             # ✅ Stage 11: Monitoring
+│       ├── historian.md            # ✅ Stage 12: Retrospective
+│       └── archivist.md            # ✅ Stage 13: Wiki documentation
 │
 ├── tasks/                          # Generated task artifacts
 │   └── ISSUE-123/
@@ -196,7 +206,8 @@ ai-team-mvp/
 - [x] TypeScript setup
 - [x] Environment configuration
 
-✅ **Agents:**
+✅ **Agents (14-Stage Pipeline):**
+- [x] Intake (Stage 0) - Requirements validation & issue classification
 - [x] Detective (Stage 1) - Bug triage
 - [x] Archaeologist (Stage 2) - Root cause analysis
 - [x] Surgeon (Stage 3) - Implementation
@@ -208,7 +219,8 @@ ai-team-mvp/
 - [x] Planner (Stage 9) - Production planning
 - [x] Commander (Stage 10) - Production deployment
 - [x] Guardian (Stage 11) - Monitoring
-- [x] Historian (Stage 12) - Documentation
+- [x] Historian (Stage 12) - Retrospective documentation
+- [x] Archivist (Stage 13) - Wiki knowledge base updates
 
 ✅ **Automation:**
 - [x] Automated issue monitoring
@@ -222,26 +234,21 @@ ai-team-mvp/
 ✅ **Testing:**
 - [x] Test script for Detective agent
 - [x] Pipeline test for Detective → Archaeologist
-- [ ] Full 12-stage pipeline test
+- [x] Full 14-stage pipeline test
 
 ---
 
-## Next Steps
+## Recent Improvements
 
-### Phase 1: Complete All Agents (Week 1)
-1. Create agent configs for remaining 11 agents
-2. Test each agent individually
-3. Build Orchestrator to run them sequentially
-
-### Phase 2: Human Approvals (Week 2)
-1. Add approval checkpoints (3 required)
-2. Build CLI for approvals
-3. Test end-to-end flow
-
-### Phase 3: Deploy MVP (Week 3)
-1. Error handling & retries
-2. Documentation
-3. Deploy to staging
+✅ **Completed:**
+- All 14 agents implemented and operational
+- Intake agent for requirements validation (Stage 0)
+- Archivist agent for wiki documentation (Stage 13)
+- Automatic issue closure for invalid/low-quality issues
+- Auto-request more info for incomplete issues
+- Real Vercel deployment integration
+- Wiki knowledge base integration
+- Issue decomposition for complex tasks
 
 ---
 
@@ -287,11 +294,12 @@ npm run test -- 123
 - Saves triage report to `tasks/ISSUE-123/`
 - Logs to `logs/combined.log`
 
-### 4. Next Agent (Future)
-- Archaeologist reads triage report
-- Analyzes root cause
-- Passes to Surgeon
-- ... and so on through all 12 stages
+### 4. Pipeline Flow
+- Intake validates requirements and classifies issue
+- Detective triages and assigns severity
+- Archaeologist analyzes root cause
+- Surgeon implements fix
+- ... and so on through all 14 stages
 
 ---
 
@@ -348,9 +356,9 @@ Your GitHub token needs:
 - ~3,000 tokens per issue
 - Cost: ~$0.01 per issue (using Sonnet)
 
-**Full Pipeline (all 12 agents):**
-- ~90,000 tokens per issue
-- Cost: ~$1.20 per bug fixed
+**Full Pipeline (all 14 agents):**
+- ~100,000 tokens per issue
+- Cost: ~$1.50 per bug fixed
 
 ---
 
