@@ -126,7 +126,7 @@ export class AgentRunner {
           temperature: 0.3,
           tools: tools,
           messages: messages
-        });
+        } as any);
 
         totalTokens += response.usage.input_tokens + response.usage.output_tokens;
 
@@ -138,7 +138,7 @@ export class AgentRunner {
           break;
         }
 
-        if (response.stop_reason === 'tool_use') {
+        if ((response.stop_reason as string) === 'tool_use') {
           // Process tool use
           if (!toolExecutor) {
             throw new Error('Tool use requested but tool executor not initialized');

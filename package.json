@@ -7,7 +7,7 @@
     "ai-team": "./dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "npx tsc",
     "dev": "ts-node src/index.ts",
     "cli": "ts-node src/cli.ts",
     "test": "ts-node src/test.ts",
@@ -21,7 +21,7 @@
     "override": "ts-node src/override_termination.ts",
     "watch:issues": "ts-node src/issue_watcher.ts",
     "start": "node dist/index.js",
-    "watch": "tsc --watch"
+    "watch": "npx tsc --watch"
   },
   "keywords": ["ai", "automation", "claude", "bugfix"],
   "author": "Your Team",
