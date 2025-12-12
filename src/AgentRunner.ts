@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './utils/logger';
 import { WikiClient } from './integrations/WikiClient';
+import { FILE_OPERATION_TOOLS } from './tools/fileTools';
+import { ToolExecutor } from './tools/ToolExecutor';
 
 export interface AgentContext {
   issueUrl?: string;
@@ -40,7 +42,8 @@ export class AgentRunner {
    */
   async runAgent(
     agentName: string,
-    context: AgentContext
+    context: AgentContext,
+    options?: { toolsEnabled?: boolean }
   ): Promise<AgentResult> {
     const startTime = Date.now();
 
@@ -88,35 +91,105 @@ export class AgentRunner {
         }
       }
 
-      // Call Claude API
-      logger.info(`Calling Claude API for ${agentName}...`);
-      const response = await this.client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        temperature: 0.3,
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ]
+      // Determine if tools should be enabled (Surgeon gets tools by default)
+      const enableTools = options?.toolsEnabled ?? (agentName === 'surgeon');
+      const tools = enableTools ? FILE_OPERATION_TOOLS : undefined;
+
+      // Initialize tool executor if tools enabled
+      const toolExecutor = enableTools ? new ToolExecutor(process.cwd()) : null;
+
+      // Initialize message history
+      const messages: Anthropic.MessageParam[] = [
+        { role: 'user', content: prompt }
+      ];
+
+      // Agentic loop
+      let iteration = 0;
+      const MAX_ITERATIONS = 10;
+      let totalTokens = 0;
+      let finalOutput = '';
+
+      logger.info(`Calling Claude API for ${agentName}...`, {
+        toolsEnabled: enableTools,
+        maxIterations: MAX_ITERATIONS
       });
 
-      const output = response.content[0].type === 'text'
-        ? response.content[0].text
-        : '';
+      while (iteration < MAX_ITERATIONS) {
+        iteration++;
+
+        logger.info(`Agent ${agentName} iteration ${iteration}/${MAX_ITERATIONS}`);
+
+        // Call Claude API
+        const response = await this.client.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 8000,
+          temperature: 0.3,
+          tools: tools,
+          messages: messages
+        });
+
+        totalTokens += response.usage.input_tokens + response.usage.output_tokens;
+
+        // Handle stop reason
+        if (response.stop_reason === 'end_turn') {
+          // Agent is done
+          finalOutput = this.extractTextOutput(response.content);
+          logger.info(`Agent ${agentName} completed naturally`, { iteration });
+          break;
+        }
+
+        if (response.stop_reason === 'tool_use') {
+          // Process tool use
+          if (!toolExecutor) {
+            throw new Error('Tool use requested but tool executor not initialized');
+          }
+
+          const toolResults = await this.processToolUse(response.content, toolExecutor);
+
+          // Add assistant message to history
+          messages.push({
+            role: 'assistant',
+            content: response.content
+          });
+
+          // Add tool results to history
+          messages.push({
+            role: 'user',
+            content: toolResults
+          });
+
+          // Continue loop
+          continue;
+        }
+
+        if (response.stop_reason === 'max_tokens') {
+          // Hit token limit, extract what we have
+          finalOutput = this.extractTextOutput(response.content);
+          logger.warn(`Agent ${agentName} hit max_tokens`, { iteration });
+          break;
+        }
+
+        // Unexpected stop reason
+        throw new Error(`Unexpected stop_reason: ${response.stop_reason}`);
+      }
+
+      if (iteration >= MAX_ITERATIONS) {
+        logger.warn(`Agent ${agentName} hit max iterations`, { iterations: MAX_ITERATIONS });
+        finalOutput += '\n\n[Note: Reached maximum tool use iterations]';
+      }
 
       const durationMs = Date.now() - startTime;
 
       logger.info(`Agent ${agentName} completed`, {
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        tokensUsed: totalTokens,
+        iterations: iteration,
         durationMs
       });
 
       return {
         success: true,
-        output,
-        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        output: finalOutput,
+        tokensUsed: totalTokens,
         durationMs
       };
 
@@ -131,6 +204,59 @@ export class AgentRunner {
         durationMs
       };
     }
+  }
+
+  /**
+   * Extract text output from Claude response content
+   */
+  private extractTextOutput(content: Array<any>): string {
+    const textBlocks = content.filter(block => block.type === 'text');
+    return textBlocks.map(block => block.text).join('\n');
+  }
+
+  /**
+   * Process tool use blocks and return tool results
+   */
+  private async processToolUse(
+    content: Array<any>,
+    toolExecutor: ToolExecutor
+  ): Promise<Array<any>> {
+    const toolResults = [];
+
+    for (const block of content) {
+      if (block.type === 'tool_use') {
+        logger.info('Executing tool', {
+          tool: block.name,
+          input: block.input
+        });
+
+        try {
+          const result = await toolExecutor.execute(block.name, block.input);
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: JSON.stringify(result),
+            is_error: !result.success
+          });
+
+        } catch (error: any) {
+          logger.error('Tool execution failed', {
+            tool: block.name,
+            error: error.message
+          });
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: block.id,
+            content: JSON.stringify({ error: error.message }),
+            is_error: true
+          });
+        }
+      }
+    }
+
+    return toolResults;
   }
 
   /**

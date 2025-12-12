@@ -226,8 +226,12 @@ export class Orchestrator {
       // Build context for agent
       const context = this.buildAgentContext(taskState, stageIndex);
 
-      // Run agent
-      const result = await this.agentRunner.runAgent(stageConfig.agentName, context);
+      // Run agent with tools enabled for Surgeon
+      const result = await this.agentRunner.runAgent(
+        stageConfig.agentName,
+        context,
+        { toolsEnabled: stageConfig.agentName === 'surgeon' }
+      );
 
       if (!result.success) {
         throw new Error(result.error || 'Agent execution failed');
