@@ -155,22 +155,16 @@ export class Orchestrator {
     // Extract labels
     const issueLabels = issue.labels.map(l => l.name);
 
-    // Detect resume stage from labels (e.g., "stage-4" means resume from stage 4)
-    let resumeStage = 0;
-    const stageLabel = issueLabels.find(l => l.match(/^stage-(\d+)$/));
-    if (stageLabel) {
-      const match = stageLabel.match(/^stage-(\d+)$/);
-      if (match) {
-        // Stage labels are 1-indexed, internal stages are 0-indexed
-        // If failed at stage-4, we want to resume FROM stage 3 (0-indexed)
-        resumeStage = Math.max(0, parseInt(match[1], 10) - 1);
-        logger.info('Detected previous run, resuming from stage', { stageLabel, resumeStage });
-      }
-    }
-
     // Check if this is a re-run (has 'failed' label or previous comments from agents)
     const isRerun = issueLabels.includes('failed') ||
                     comments.some(c => c.user.login === 'github-actions[bot]');
+
+    // Always start from stage 0 - agents will read previous comments for context
+    // This ensures full pipeline execution and proper context passing between stages
+    const resumeStage = 0;
+    if (isRerun) {
+      logger.info('Re-run detected - starting fresh but agents will read previous comments for context');
+    }
 
     // Create branch name (sanitize issue title for branch name)
     const branchName = `fix/issue-${issueNumber}-${issue.title
@@ -191,11 +185,10 @@ export class Orchestrator {
       issueLabels,
       branchName,
       currentStage: resumeStage,
-      stages: this.config.stages.map((stage, index) => ({
+      stages: this.config.stages.map((stage) => ({
         stageName: stage.name,
         agentName: stage.agentName,
-        // Mark previous stages as skipped on resume
-        status: index < resumeStage ? 'skipped' : 'pending'
+        status: 'pending' as const
       })),
       status: 'pending',
       createdAt: new Date().toISOString(),
@@ -232,12 +225,15 @@ export class Orchestrator {
       throw new Error(`Failed to create branch: ${error.message}`);
     }
 
-    // Remove 'failed' label on re-run
-    if (issueLabels.includes('failed')) {
-      try {
-        await this.githubClient.removeLabel(issueNumber, 'failed');
-      } catch (e) {
-        // Ignore if label removal fails
+    // Clean up labels from previous runs
+    if (isRerun) {
+      const labelsToRemove = ['failed', 'in-progress', ...issueLabels.filter(l => l.match(/^stage-\d+$/))];
+      for (const label of labelsToRemove) {
+        try {
+          await this.githubClient.removeLabel(issueNumber, label);
+        } catch (e) {
+          // Ignore if label removal fails
+        }
       }
     }
 
