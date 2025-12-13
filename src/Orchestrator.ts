@@ -381,6 +381,16 @@ export class Orchestrator {
     } catch (error: any) {
       logger.error('Stage failed', { taskId, stage: stageConfig.name, error: error.message });
 
+      // Attempt self-healing
+      const healed = await this.attemptSelfHealing(taskState, stageIndex, error);
+
+      if (healed) {
+        logger.info('Self-healing successful, retrying stage', { taskId, stage: stageConfig.name });
+        // Retry the stage after healing
+        return this.runNextStage(taskId);
+      }
+
+      // Self-healing failed, mark as failed
       stageResult.status = 'failed';
       stageResult.error = error.message;
       taskState.status = 'failed';
@@ -883,6 +893,131 @@ export class Orchestrator {
 
     // Never halt - always return false
     return false;
+  }
+
+  /**
+   * Attempt to self-heal a failed stage
+   * Returns true if fixed and stage should be retried
+   */
+  private async attemptSelfHealing(
+    taskState: TaskState,
+    stageIndex: number,
+    error: any
+  ): Promise<boolean> {
+    // Track retry attempts to prevent infinite loops
+    const retryKey = `${taskState.taskId}-stage-${stageIndex}`;
+    const retryCount = (taskState as any)._retryCount?.[retryKey] || 0;
+
+    if (retryCount >= 3) {
+      logger.warn('Max retry attempts reached, giving up on self-healing', {
+        taskId: taskState.taskId,
+        stage: stageIndex,
+        retryCount
+      });
+      return false;
+    }
+
+    // Increment retry count
+    (taskState as any)._retryCount = (taskState as any)._retryCount || {};
+    (taskState as any)._retryCount[retryKey] = retryCount + 1;
+
+    const errorMessage = error.message || String(error);
+    const stageConfig = this.config.stages[stageIndex];
+
+    logger.info('Attempting self-healing', {
+      taskId: taskState.taskId,
+      stage: stageConfig.name,
+      error: errorMessage,
+      retryAttempt: retryCount + 1
+    });
+
+    // Notify GitHub about self-healing attempt
+    await this.githubClient.addComment(
+      taskState.issueNumber,
+      `🔧 **Self-Healing Attempt ${retryCount + 1}/3**\n\n` +
+      `Stage **${stageConfig.name}** failed with error:\n\`\`\`\n${errorMessage}\n\`\`\`\n\n` +
+      `Analyzing error and attempting automatic fix...`
+    );
+
+    try {
+      // Call the Debugger agent to analyze and fix
+      const debugContext = {
+        issueNumber: taskState.issueNumber,
+        issueTitle: taskState.issueTitle,
+        issueBody: taskState.issueBody,
+        issueUrl: taskState.issueUrl,
+        failedStage: stageConfig.name,
+        failedAgentName: stageConfig.agentName,
+        errorMessage: errorMessage,
+        errorStack: error.stack || '',
+        previousStageOutputs: this.buildAgentContext(taskState, stageIndex)
+      };
+
+      const result = await this.agentRunner.runAgent(
+        'debugger',
+        debugContext,
+        { toolsEnabled: true }
+      );
+
+      if (!result.success) {
+        logger.warn('Debugger agent failed', { error: result.error });
+        await this.githubClient.addComment(
+          taskState.issueNumber,
+          `❌ **Self-Healing Failed**\n\nDebugger could not resolve the issue: ${result.error}`
+        );
+        return false;
+      }
+
+      // Check if the debugger fixed the issue
+      const output = result.output.toLowerCase();
+      const wasFixed = output.includes('fixed_automatically') ||
+                       output.includes('status:** fixed') ||
+                       output.includes('fix applied');
+
+      if (wasFixed) {
+        logger.info('Self-healing successful', { taskId: taskState.taskId, stage: stageConfig.name });
+        await this.githubClient.addComment(
+          taskState.issueNumber,
+          `✅ **Self-Healing Successful**\n\n${this.extractFixSummary(result.output)}\n\nRetrying stage...`
+        );
+        return true;
+      } else {
+        logger.warn('Debugger could not fix the issue', { output: result.output.substring(0, 500) });
+        await this.githubClient.addComment(
+          taskState.issueNumber,
+          `⚠️ **Self-Healing Incomplete**\n\n` +
+          `The debugger analyzed the error but could not automatically fix it.\n\n` +
+          `**Analysis:**\n${this.extractFixSummary(result.output)}\n\n` +
+          `Human intervention may be required.`
+        );
+        return false;
+      }
+
+    } catch (healingError: any) {
+      logger.error('Self-healing process failed', { error: healingError.message });
+      await this.githubClient.addComment(
+        taskState.issueNumber,
+        `❌ **Self-Healing Error**\n\nThe self-healing process itself failed: ${healingError.message}`
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Extract a summary from the debugger output
+   */
+  private extractFixSummary(output: string): string {
+    // Try to extract the fix summary section
+    const summaryMatch = output.match(/## Fix Applied[\s\S]*?(?=##|$)/i) ||
+                        output.match(/## Root Cause[\s\S]*?(?=##|$)/i) ||
+                        output.match(/## Error Summary[\s\S]*?(?=##|$)/i);
+
+    if (summaryMatch) {
+      return summaryMatch[0].trim().substring(0, 1000);
+    }
+
+    // Fallback to first 500 chars
+    return output.substring(0, 500) + (output.length > 500 ? '...' : '');
   }
 
   /**
