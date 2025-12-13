@@ -242,9 +242,124 @@ if (gptReview.approved && geminiImpact.safeToMerge) {
 
 ---
 
+## Browser Testing & Visual Verification
+
+### 11. Microsoft Playwright MCP (Recommended)
+- [ ] Install `@playwright/mcp@latest`
+- [ ] Configure in MCP settings:
+  ```json
+  {
+    "mcpServers": {
+      "playwright": {
+        "command": "npx",
+        "args": ["@playwright/mcp@latest"]
+      }
+    }
+  }
+  ```
+- [ ] Expose tools to agents:
+  - `browser_navigate` - Go to URL
+  - `browser_click` - Click element by accessibility label
+  - `browser_type` - Type text into input
+  - `browser_snapshot` - Get accessibility tree snapshot
+  - `browser_screenshot` - Take visual screenshot
+  - `browser_scroll` - Scroll page
+  - `browser_wait` - Wait for element/condition
+- **Why Playwright over Puppeteer**:
+  - Uses **accessibility tree** (not pixels) - more reliable
+  - Plain-English commands ("click the login button")
+  - Multi-browser: Chrome, Firefox, WebKit
+  - Official Microsoft support
+  - No vision models needed
+- **Source**: [microsoft/playwright-mcp](https://github.com/microsoft/playwright-mcp)
+
+### Browser Testing Use Cases
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              BROWSER TESTING INTEGRATION                     │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  After Vercel Deploy (Stage 7/10):                          │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  1. Navigate to deployment URL                      │     │
+│  │  2. Get accessibility snapshot                      │     │
+│  │  3. Verify key elements exist                       │     │
+│  │  4. Test interactive features (click, type)         │     │
+│  │  5. Take screenshots for visual record              │     │
+│  │  6. Report pass/fail to pipeline                    │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                              │
+│  Visual Regression Testing:                                  │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  • Compare screenshots before/after changes         │     │
+│  │  • Detect layout breaks automatically               │     │
+│  │  • Test responsive breakpoints                      │     │
+│  │  • Verify dark mode / theme switches                │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                              │
+│  Functional Testing:                                         │
+│  ┌────────────────────────────────────────────────────┐     │
+│  │  • Fill and submit forms                            │     │
+│  │  • Test authentication flows                        │     │
+│  │  • Verify API integrations work                     │     │
+│  │  • Check error states display correctly             │     │
+│  └────────────────────────────────────────────────────┘     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Configuration Options
+
+```json
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--browser", "chrome",
+        "--headless",
+        "--caps", "vision,pdf"
+      ]
+    }
+  }
+}
+```
+
+| Argument | Options | Description |
+|----------|---------|-------------|
+| `--browser` | chrome, firefox, webkit, msedge | Browser to use |
+| `--headless` | flag | Run without visible browser |
+| `--caps` | vision, pdf | Enable screenshots, PDF export |
+| `--device` | "iPhone 15" | Mobile device emulation |
+
+### Integration with Guardian Agent
+
+The Guardian agent (Stage 11) can use Playwright to:
+1. Navigate to the Vercel preview URL
+2. Run automated accessibility checks
+3. Test core user flows
+4. Take before/after screenshots
+5. Report any visual regressions
+
+```typescript
+// Guardian agent browser verification
+const verificationSteps = [
+  { action: 'navigate', url: previewUrl },
+  { action: 'snapshot', verify: ['header', 'main', 'footer'] },
+  { action: 'click', target: 'Login button' },
+  { action: 'type', target: 'Email input', text: 'test@example.com' },
+  { action: 'screenshot', name: 'login-form-filled' },
+  { action: 'verify', condition: 'no console errors' }
+];
+```
+
+---
+
 ## Agent Todo List Feature
 
-### 11. Add TodoList Tool for Agents
+### 12. Add TodoList Tool for Agents
 - [ ] Create `todo_tools.ts` with:
   - `todo_add` - Add task to list
   - `todo_complete` - Mark task done
@@ -276,12 +391,18 @@ if (gptReview.approved && geminiImpact.safeToMerge) {
 ### Phase 4: External Services
 10. GitHub MCP
 11. Vercel MCP
-12. Agent-specific RAG namespaces
+12. Playwright Browser Testing MCP
 
-### Phase 5: Advanced
-13. Cross-issue learning
-14. Automatic pattern extraction
-15. Self-improving prompts
+### Phase 5: Testing & Verification
+13. Guardian agent browser integration
+14. Visual regression testing pipeline
+15. Automated accessibility checks
+
+### Phase 6: Advanced Learning
+16. Agent-specific RAG namespaces
+17. Cross-issue learning
+18. Automatic pattern extraction
+19. Self-improving prompts
 
 ---
 
@@ -356,7 +477,9 @@ CREATE TABLE issue_history (
 
 - [Official MCP Servers](https://github.com/modelcontextprotocol/servers)
 - [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)
+- [Microsoft Playwright MCP](https://github.com/microsoft/playwright-mcp)
 - [Supabase pgvector](https://supabase.com/docs/guides/ai)
 - [OpenAI API](https://platform.openai.com/docs)
 - [Google AI (Gemini)](https://ai.google.dev/)
 - [Context7 by Upstash](https://github.com/upstash/context7)
+- [Brave Search API](https://brave.com/search/api/)
