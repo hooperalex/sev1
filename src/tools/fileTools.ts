@@ -6,6 +6,8 @@
  */
 
 import { TODO_TOOLS } from './todoTools';
+import { SUPABASE_TOOLS } from './supabaseTools';
+import { RAG_TOOLS } from './ragTools';
 
 /**
  * Tool definitions for Claude API
@@ -108,9 +110,11 @@ export interface ToolResult {
 }
 
 /**
- * All available tools (file operations + todo tools)
+ * All available tools (file operations + todo + supabase + RAG tools)
  */
 export const ALL_AGENT_TOOLS: any[] = [
   ...FILE_OPERATION_TOOLS,
-  ...TODO_TOOLS
+  ...TODO_TOOLS,
+  ...SUPABASE_TOOLS,
+  ...RAG_TOOLS
 ];

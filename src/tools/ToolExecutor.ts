@@ -29,6 +29,23 @@ import type {
   TodoResult,
   TodoState
 } from './todoTools';
+import { getSupabaseIntegration, SupabaseIntegration } from '../integrations/SupabaseClient';
+import type {
+  DBExecuteSQLInput,
+  MemoryStoreInput,
+  MemoryRecallInput,
+  ProjectRememberInput,
+  ProjectRecallInput,
+  IssueHistorySearchInput,
+  SupabaseToolResult
+} from './supabaseTools';
+import { CodebaseIndexer, createCodebaseIndexer } from '../services/CodebaseIndexer';
+import type {
+  SemanticSearchInput,
+  FindSimilarCodeInput,
+  IndexCodebaseInput,
+  RAGToolResult
+} from './ragTools';
 
 /**
  * Maximum file size for read operations (10MB)
@@ -39,8 +56,11 @@ export class ToolExecutor {
   private baseDir: string;
   private operationCount: number = 0;
   private todoManager: TodoManager;
+  private supabase: SupabaseIntegration;
+  private codebaseIndexer: CodebaseIndexer;
   private agentName?: string;
   private stageIndex?: number;
+  private issueNumber?: number;
 
   constructor(
     baseDir: string,
@@ -51,12 +71,16 @@ export class ToolExecutor {
   ) {
     this.baseDir = path.resolve(baseDir);
     this.todoManager = new TodoManager(taskId, issueNumber);
+    this.supabase = getSupabaseIntegration();
+    this.codebaseIndexer = createCodebaseIndexer(baseDir);
     this.agentName = agentName;
     this.stageIndex = stageIndex;
+    this.issueNumber = issueNumber;
     logger.info('ToolExecutor initialized', {
       baseDir: this.baseDir,
       taskId,
-      agentName
+      agentName,
+      supabaseAvailable: this.supabase.isAvailable()
     });
   }
 
@@ -137,6 +161,32 @@ export class ToolExecutor {
           return this.handleTodoRemove(input as TodoRemoveInput);
         case 'todo_clear_completed':
           return this.handleTodoClearCompleted();
+
+        // Supabase/Database tools
+        case 'db_execute_sql':
+          return await this.handleDBExecuteSQL(input as DBExecuteSQLInput);
+        case 'db_list_tables':
+          return await this.handleDBListTables();
+        case 'memory_store':
+          return await this.handleMemoryStore(input as MemoryStoreInput);
+        case 'memory_recall':
+          return await this.handleMemoryRecall(input as MemoryRecallInput);
+        case 'project_remember':
+          return await this.handleProjectRemember(input as ProjectRememberInput);
+        case 'project_recall':
+          return await this.handleProjectRecall(input as ProjectRecallInput);
+        case 'issue_history_search':
+          return await this.handleIssueHistorySearch(input as IssueHistorySearchInput);
+
+        // RAG/Semantic search tools
+        case 'semantic_search':
+          return await this.handleSemanticSearch(input as SemanticSearchInput);
+        case 'find_similar_code':
+          return await this.handleFindSimilarCode(input as FindSimilarCodeInput);
+        case 'index_codebase':
+          return await this.handleIndexCodebase(input as IndexCodebaseInput);
+        case 'get_index_stats':
+          return await this.handleGetIndexStats();
 
         default:
           return {
@@ -421,5 +471,195 @@ export class ToolExecutor {
   private handleTodoClearCompleted(): TodoResult {
     logger.info('Clearing completed todos');
     return this.todoManager.clearCompleted();
+  }
+
+  // ==================== SUPABASE HANDLERS ====================
+
+  /**
+   * Handle db_execute_sql tool
+   */
+  private async handleDBExecuteSQL(input: DBExecuteSQLInput): Promise<SupabaseToolResult> {
+    logger.info('Executing SQL', { sqlPreview: input.sql.substring(0, 50) });
+    // Use direct Postgres connection for full SQL capability (DDL + DML)
+    if (this.supabase.hasDirectAccess()) {
+      const result = await this.supabase.executeDirect(input.sql);
+      return {
+        success: result.success,
+        data: result.rows,
+        error: result.error,
+        message: result.success ? `Query executed, ${result.rows?.length || 0} rows returned` : undefined
+      };
+    }
+    // Fallback to RPC if no direct access
+    return await this.supabase.executeSQL(input.sql);
+  }
+
+  /**
+   * Handle db_list_tables tool
+   */
+  private async handleDBListTables(): Promise<SupabaseToolResult> {
+    logger.info('Listing database tables');
+    return await this.supabase.listTables();
+  }
+
+  /**
+   * Handle memory_store tool
+   */
+  private async handleMemoryStore(input: MemoryStoreInput): Promise<SupabaseToolResult> {
+    logger.info('Storing memory', { type: input.memory_type });
+    return await this.supabase.storeMemory({
+      agent_name: this.agentName || 'unknown',
+      issue_number: this.issueNumber,
+      memory_type: input.memory_type,
+      content: input.content,
+      context: input.context
+    });
+  }
+
+  /**
+   * Handle memory_recall tool
+   */
+  private async handleMemoryRecall(input: MemoryRecallInput): Promise<SupabaseToolResult> {
+    logger.info('Recalling memories', { type: input.memory_type });
+    const result = await this.supabase.recallMemories(this.agentName || 'unknown', {
+      memoryType: input.memory_type === 'all' ? undefined : input.memory_type,
+      limit: input.limit
+    });
+    return {
+      success: result.success,
+      memories: result.memories,
+      error: result.error,
+      message: result.success ? `Retrieved ${result.memories?.length || 0} memories` : undefined
+    };
+  }
+
+  /**
+   * Handle project_remember tool
+   */
+  private async handleProjectRemember(input: ProjectRememberInput): Promise<SupabaseToolResult> {
+    logger.info('Remembering project fact', { key: input.key });
+    const result = await this.supabase.rememberFact(input.key, input.value, input.category);
+    return {
+      success: result.success,
+      error: result.error,
+      message: result.success ? `Remembered: ${input.key} = ${input.value}` : undefined
+    };
+  }
+
+  /**
+   * Handle project_recall tool
+   */
+  private async handleProjectRecall(input: ProjectRecallInput): Promise<SupabaseToolResult> {
+    logger.info('Recalling project facts', { category: input.category });
+    const result = await this.supabase.recallFacts(input.category);
+    return {
+      success: result.success,
+      facts: result.facts,
+      error: result.error,
+      message: result.success ? `Retrieved ${Object.keys(result.facts || {}).length} facts` : undefined
+    };
+  }
+
+  /**
+   * Handle issue_history_search tool
+   */
+  private async handleIssueHistorySearch(input: IssueHistorySearchInput): Promise<SupabaseToolResult> {
+    logger.info('Searching issue history');
+    const result = await this.supabase.findSimilarIssues(
+      this.issueNumber || 0,
+      input.limit
+    );
+    return {
+      success: result.success,
+      issues: result.issues,
+      error: result.error,
+      message: result.success ? `Found ${result.issues?.length || 0} similar issues` : undefined
+    };
+  }
+
+  // ==================== RAG HANDLERS ====================
+
+  /**
+   * Handle semantic_search tool
+   */
+  private async handleSemanticSearch(input: SemanticSearchInput): Promise<RAGToolResult> {
+    logger.info('Semantic search', { query: input.query.substring(0, 50) });
+    try {
+      const results = await this.codebaseIndexer.search(input.query, {
+        limit: input.limit,
+        threshold: input.threshold,
+        filePattern: input.file_pattern
+      });
+
+      return {
+        success: true,
+        results,
+        message: `Found ${results.length} relevant code sections`
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Handle find_similar_code tool
+   */
+  private async handleFindSimilarCode(input: FindSimilarCodeInput): Promise<RAGToolResult> {
+    logger.info('Finding similar code');
+    try {
+      const results = await this.codebaseIndexer.search(input.code, {
+        limit: input.limit || 5
+      });
+
+      return {
+        success: true,
+        results,
+        message: `Found ${results.length} similar code sections`
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Handle index_codebase tool
+   */
+  private async handleIndexCodebase(input: IndexCodebaseInput): Promise<RAGToolResult> {
+    logger.info('Indexing codebase', { force: input.force });
+    try {
+      const stats = await this.codebaseIndexer.indexCodebase({
+        forceReindex: input.force
+      });
+
+      return {
+        success: true,
+        indexStats: stats,
+        message: `Indexed ${stats.filesProcessed} files, created ${stats.chunksCreated} chunks`
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Handle get_index_stats tool
+   */
+  private async handleGetIndexStats(): Promise<RAGToolResult> {
+    logger.info('Getting index stats');
+    try {
+      const stats = await this.codebaseIndexer.getStats();
+
+      return {
+        success: true,
+        stats: {
+          totalFiles: stats.totalFiles,
+          totalChunks: stats.totalChunks,
+          lastIndexed: stats.lastIndexed?.toISOString() || null
+        },
+        message: `Index contains ${stats.totalChunks} chunks from ${stats.totalFiles} files`
+      };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
   }
 }
