@@ -3,8 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './utils/logger';
 import { WikiClient } from './integrations/WikiClient';
-import { FILE_OPERATION_TOOLS } from './tools/fileTools';
+import { ALL_AGENT_TOOLS } from './tools/fileTools';
 import { ToolExecutor } from './tools/ToolExecutor';
+import type { TodoState } from './tools/todoTools';
 
 export interface AgentContext {
   issueUrl?: string;
@@ -15,6 +16,8 @@ export interface AgentContext {
   taskId?: string;
   wikiSummary?: string;
   wikiSearchResults?: string;
+  todoState?: TodoState;      // Todo state from previous stage
+  stageIndex?: number;        // Current stage index
   [key: string]: any;
 }
 
@@ -24,6 +27,8 @@ export interface AgentResult {
   error?: string;
   tokensUsed?: number;
   durationMs?: number;
+  todoState?: TodoState;      // Todo state to pass to next stage
+  todoMarkdown?: string;      // Todo list as markdown for GitHub comments
 }
 
 export class AgentRunner {
@@ -91,12 +96,26 @@ export class AgentRunner {
         }
       }
 
-      // Determine if tools should be enabled (Surgeon gets tools by default)
-      const enableTools = options?.toolsEnabled ?? (agentName === 'surgeon');
-      const tools = enableTools ? FILE_OPERATION_TOOLS : undefined;
+      // Determine if tools should be enabled (Surgeon and Debugger get tools by default)
+      const enableTools = options?.toolsEnabled ?? (agentName === 'surgeon' || agentName === 'debugger');
+      const tools = enableTools ? ALL_AGENT_TOOLS : undefined;
 
       // Initialize tool executor if tools enabled
-      const toolExecutor = enableTools ? new ToolExecutor(process.cwd()) : null;
+      const toolExecutor = enableTools ? new ToolExecutor(
+        process.cwd(),
+        context.taskId || 'default',
+        context.issueNumber,
+        agentName,
+        context.stageIndex
+      ) : null;
+
+      // Load todo state from previous stage if available
+      if (toolExecutor && context.todoState) {
+        toolExecutor.loadTodoState(context.todoState);
+        logger.info('Loaded todo state from previous stage', {
+          todoCount: context.todoState.todos.length
+        });
+      }
 
       // Initialize message history
       const messages: Anthropic.MessageParam[] = [
@@ -180,17 +199,24 @@ export class AgentRunner {
 
       const durationMs = Date.now() - startTime;
 
+      // Get todo state and markdown for output
+      const todoState = toolExecutor?.getTodoState();
+      const todoMarkdown = toolExecutor?.getTodoMarkdown();
+
       logger.info(`Agent ${agentName} completed`, {
         tokensUsed: totalTokens,
         iterations: iteration,
-        durationMs
+        durationMs,
+        todoCount: todoState?.todos.length || 0
       });
 
       return {
         success: true,
         output: finalOutput,
         tokensUsed: totalTokens,
-        durationMs
+        durationMs,
+        todoState,
+        todoMarkdown
       };
 
     } catch (error: any) {
@@ -333,11 +359,27 @@ export class AgentRunner {
       prompt += `${context.previousOutput}\n`;
     }
 
+    // Add todo list if available
+    if (context.todoState && context.todoState.todos.length > 0) {
+      const todoManager = new (require('./tools/TodoManager').TodoManager)(
+        context.taskId || 'default',
+        context.issueNumber
+      );
+      todoManager.loadState(context.todoState);
+
+      prompt += `\n${'='.repeat(60)}\n`;
+      prompt += `YOUR TODO LIST:\n`;
+      prompt += `${'='.repeat(60)}\n`;
+      prompt += todoManager.toPrompt();
+      prompt += `\n`;
+    }
+
     // Add any other context fields
     const standardFields = [
       'issueUrl', 'issueNumber', 'issueTitle', 'issueBody',
       'issueComments', 'issueLabels',
-      'previousOutput', 'taskId', 'wikiSummary', 'wikiSearchResults'
+      'previousOutput', 'taskId', 'wikiSummary', 'wikiSearchResults',
+      'todoState', 'stageIndex'
     ];
     const customFields = Object.keys(context).filter(k => !standardFields.includes(k));
 

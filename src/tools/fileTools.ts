@@ -5,6 +5,8 @@
  * These tools enable agents (especially Surgeon) to read and write code files.
  */
 
+import { TODO_TOOLS } from './todoTools';
+
 /**
  * Tool definitions for Claude API
  */
@@ -104,3 +106,11 @@ export interface ToolResult {
   message?: string;
   error?: string;
 }
+
+/**
+ * All available tools (file operations + todo tools)
+ */
+export const ALL_AGENT_TOOLS: any[] = [
+  ...FILE_OPERATION_TOOLS,
+  ...TODO_TOOLS
+];

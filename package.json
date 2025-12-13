@@ -40,12 +40,14 @@
     "inquirer": "^8.2.6",
     "ora": "^5.4.1",
     "simple-git": "^3.22.0",
+    "uuid": "^13.0.0",
     "winston": "^3.11.0",
     "yaml": "^2.3.4"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.7",
     "@types/node": "^20.10.5",
+    "@types/uuid": "^10.0.0",
     "@vercel/node": "^5.5.15",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"

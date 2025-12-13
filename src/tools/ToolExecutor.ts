@@ -7,6 +7,7 @@
  * - Apply file size limits
  * - Log all operations for audit trail
  * - Return structured results to Claude
+ * - Manage agent todo lists
  */
 
 import * as fs from 'fs/promises';
@@ -19,6 +20,15 @@ import type {
   FileExistsInput,
   ToolResult
 } from './fileTools';
+import { TodoManager } from './TodoManager';
+import type {
+  TodoAddInput,
+  TodoUpdateInput,
+  TodoListInput,
+  TodoRemoveInput,
+  TodoResult,
+  TodoState
+} from './todoTools';
 
 /**
  * Maximum file size for read operations (10MB)
@@ -28,10 +38,54 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export class ToolExecutor {
   private baseDir: string;
   private operationCount: number = 0;
+  private todoManager: TodoManager;
+  private agentName?: string;
+  private stageIndex?: number;
 
-  constructor(baseDir: string) {
+  constructor(
+    baseDir: string,
+    taskId: string = 'default',
+    issueNumber?: number,
+    agentName?: string,
+    stageIndex?: number
+  ) {
     this.baseDir = path.resolve(baseDir);
-    logger.info('ToolExecutor initialized', { baseDir: this.baseDir });
+    this.todoManager = new TodoManager(taskId, issueNumber);
+    this.agentName = agentName;
+    this.stageIndex = stageIndex;
+    logger.info('ToolExecutor initialized', {
+      baseDir: this.baseDir,
+      taskId,
+      agentName
+    });
+  }
+
+  /**
+   * Load todo state from a previous stage
+   */
+  loadTodoState(state: TodoState): void {
+    this.todoManager.loadState(state);
+  }
+
+  /**
+   * Get current todo state (for passing to next stage)
+   */
+  getTodoState(): TodoState {
+    return this.todoManager.getState();
+  }
+
+  /**
+   * Get todo list as markdown (for GitHub comments)
+   */
+  getTodoMarkdown(): string {
+    return this.todoManager.toMarkdown();
+  }
+
+  /**
+   * Get todo list for prompt injection
+   */
+  getTodoPrompt(): string {
+    return this.todoManager.toPrompt();
   }
 
   /**
@@ -62,6 +116,7 @@ export class ToolExecutor {
     try {
       // Route to appropriate handler
       switch (toolName) {
+        // File operation tools
         case 'read_file':
           return await this.handleReadFile(input as ReadFileInput);
         case 'write_file':
@@ -70,6 +125,19 @@ export class ToolExecutor {
           return await this.handleListDirectory(input as ListDirectoryInput);
         case 'file_exists':
           return await this.handleFileExists(input as FileExistsInput);
+
+        // Todo tools
+        case 'todo_add':
+          return this.handleTodoAdd(input as TodoAddInput);
+        case 'todo_update':
+          return this.handleTodoUpdate(input as TodoUpdateInput);
+        case 'todo_list':
+          return this.handleTodoList(input as TodoListInput);
+        case 'todo_remove':
+          return this.handleTodoRemove(input as TodoRemoveInput);
+        case 'todo_clear_completed':
+          return this.handleTodoClearCompleted();
+
         default:
           return {
             success: false,
@@ -311,5 +379,47 @@ export class ToolExecutor {
    */
   getOperationCount(): number {
     return this.operationCount;
+  }
+
+  // ==================== TODO HANDLERS ====================
+
+  /**
+   * Handle todo_add tool
+   */
+  private handleTodoAdd(input: TodoAddInput): TodoResult {
+    logger.info('Adding todo', { content: input.content, priority: input.priority });
+    return this.todoManager.add(input, this.agentName, this.stageIndex);
+  }
+
+  /**
+   * Handle todo_update tool
+   */
+  private handleTodoUpdate(input: TodoUpdateInput): TodoResult {
+    logger.info('Updating todo', { id: input.id, status: input.status });
+    return this.todoManager.update(input);
+  }
+
+  /**
+   * Handle todo_list tool
+   */
+  private handleTodoList(input?: TodoListInput): TodoResult {
+    logger.info('Listing todos', { filter: input?.filter });
+    return this.todoManager.list(input);
+  }
+
+  /**
+   * Handle todo_remove tool
+   */
+  private handleTodoRemove(input: TodoRemoveInput): TodoResult {
+    logger.info('Removing todo', { id: input.id });
+    return this.todoManager.remove(input);
+  }
+
+  /**
+   * Handle todo_clear_completed tool
+   */
+  private handleTodoClearCompleted(): TodoResult {
+    logger.info('Clearing completed todos');
+    return this.todoManager.clearCompleted();
   }
 }

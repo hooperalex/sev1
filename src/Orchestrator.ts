@@ -19,6 +19,7 @@ import { VercelClient } from './integrations/VercelClient';
 import { DecompositionManager } from './DecompositionManager';
 import { parseArchivistOutput, applySectionUpdate } from './utils/parseArchivistOutput';
 import { logger } from './utils/logger';
+import type { TodoState } from './tools/todoTools';
 
 export interface IssueComment {
   user: string;
@@ -60,6 +61,7 @@ export interface TaskState {
     deployedAt: string;
     healthy: boolean;
   };
+  todoState?: TodoState;  // Shared todo list across agents
 }
 
 export interface StageResult {
@@ -296,6 +298,14 @@ export class Orchestrator {
       stageResult.durationMs = result.durationMs;
       stageResult.output = result.output;
 
+      // Save todo state from agent (carries forward to next stages)
+      if (result.todoState) {
+        taskState.todoState = result.todoState;
+        logger.info('Updated task todo state', {
+          todoCount: result.todoState.todos.length
+        });
+      }
+
       // Save artifact
       const artifactPath = this.saveArtifact(taskId, stageConfig.artifactName, result.output);
       stageResult.artifactPath = artifactPath;
@@ -476,7 +486,10 @@ export class Orchestrator {
       issueBody: taskState.issueBody,
       issueUrl: taskState.issueUrl,
       issueComments: formattedComments,
-      issueLabels: taskState.issueLabels?.join(', ') || ''
+      issueLabels: taskState.issueLabels?.join(', ') || '',
+      taskId: taskState.taskId,
+      stageIndex: stageIndex,
+      todoState: taskState.todoState  // Pass todo state to agent
     };
 
     // Add outputs from previous stages (including skipped stages that have output)
