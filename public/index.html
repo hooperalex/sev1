@@ -523,6 +523,136 @@
       51%, 100% { opacity: 0; }
     }
 
+    /* Submit Issue Section */
+    .submit-section {
+      background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    }
+
+    .submit-form {
+      max-width: 600px;
+      margin: 0 auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 40px;
+      backdrop-filter: blur(10px);
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+      width: 100%;
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 3px var(--glow-purple);
+    }
+
+    .form-group input::placeholder,
+    .form-group textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .form-group textarea {
+      min-height: 150px;
+      resize: vertical;
+    }
+
+    .form-group select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      background-size: 20px;
+      padding-right: 44px;
+    }
+
+    .form-group select option {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      border: none;
+      border-radius: 12px;
+      color: white;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .submit-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px var(--glow-purple);
+    }
+
+    .submit-btn:active {
+      transform: translateY(0);
+    }
+
+    .queue-info {
+      margin-top: 32px;
+      padding: 20px;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .queue-info .queue-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .queue-info .queue-count {
+      font-size: 2rem;
+      font-weight: 700;
+      color: var(--accent-purple);
+    }
+
+    .queue-info .queue-desc {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
     /* Footer */
     footer {
       padding: 48px 0;
@@ -571,9 +701,12 @@
   <nav>
     <div class="container">
       <div class="logo">SevOne<span>.ai</span></div>
-      <div class="nav-status">
-        <span class="status-dot"></span>
-        <span>16 agents online</span>
+      <div style="display: flex; align-items: center; gap: 24px;">
+        <a href="#submit" style="color: var(--text-secondary); text-decoration: none; font-size: 0.875rem; transition: color 0.2s;" onmouseover="this.style.color='var(--accent-purple)'" onmouseout="this.style.color='var(--text-secondary)'">Submit Request</a>
+        <div class="nav-status">
+          <span class="status-dot"></span>
+          <span>16 agents online</span>
+        </div>
       </div>
     </div>
   </nav>
@@ -768,6 +901,48 @@
     </div>
   </section>
 
+  <section class="submit-section" id="submit">
+    <div class="container">
+      <div class="section-header">
+        <h2>Submit a Request</h2>
+        <p>Got a bug, feature idea, or improvement? Drop it here and we'll handle it.</p>
+      </div>
+
+      <form class="submit-form" id="issueForm">
+        <div class="form-group">
+          <label for="issueType">Type</label>
+          <select id="issueType" required>
+            <option value="bug">Bug Report</option>
+            <option value="feature">Feature Request</option>
+            <option value="improvement">Improvement</option>
+            <option value="question">Question</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="issueTitle">Title</label>
+          <input type="text" id="issueTitle" placeholder="Brief description of your request" required>
+        </div>
+
+        <div class="form-group">
+          <label for="issueBody">Description</label>
+          <textarea id="issueBody" placeholder="Tell us more details. For bugs: what happened? what did you expect? how can we reproduce it?"></textarea>
+        </div>
+
+        <button type="submit" class="submit-btn">
+          <span>Submit to Queue</span>
+          <span>→</span>
+        </button>
+
+        <div class="queue-info">
+          <div class="queue-label">Current Queue</div>
+          <div class="queue-count" id="queueCount">-</div>
+          <div class="queue-desc">open issues being processed</div>
+        </div>
+      </form>
+    </div>
+  </section>
+
   <footer>
     <div class="container">
       <p>Built by AI, for humans. <a href="https://github.com/hooperalex/sev1">View the source</a>.</p>
@@ -815,6 +990,71 @@
       card.style.transform = 'translateY(30px)';
       card.style.transition = 'all 0.6s ease';
       observer.observe(card);
+    });
+
+    // GitHub repo config
+    const GITHUB_OWNER = 'hooperalex';
+    const GITHUB_REPO = 'sev1';
+
+    // Fetch open issue count
+    async function fetchQueueCount() {
+      try {
+        const response = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/issues?state=open&per_page=100`);
+        if (response.ok) {
+          const issues = await response.json();
+          // Filter out pull requests (they show up in issues API)
+          const realIssues = issues.filter(issue => !issue.pull_request);
+          document.getElementById('queueCount').textContent = realIssues.length;
+        }
+      } catch (error) {
+        console.error('Failed to fetch queue count:', error);
+        document.getElementById('queueCount').textContent = '?';
+      }
+    }
+
+    // Fetch queue count on load
+    fetchQueueCount();
+    // Refresh every 30 seconds
+    setInterval(fetchQueueCount, 30000);
+
+    // Handle form submission
+    document.getElementById('issueForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const type = document.getElementById('issueType').value;
+      const title = document.getElementById('issueTitle').value;
+      const body = document.getElementById('issueBody').value;
+
+      // Build labels based on type
+      const labels = [];
+      if (type === 'bug') labels.push('bug');
+      if (type === 'feature') labels.push('enhancement');
+      if (type === 'improvement') labels.push('improvement');
+      if (type === 'question') labels.push('question');
+
+      // Build issue body with template
+      const typeLabels = {
+        bug: 'Bug Report',
+        feature: 'Feature Request',
+        improvement: 'Improvement',
+        question: 'Question'
+      };
+
+      let issueBody = `## ${typeLabels[type]}\n\n`;
+      issueBody += body || '_No description provided_';
+      issueBody += `\n\n---\n_Submitted via SevOne.ai_`;
+
+      // Build GitHub issue URL
+      const params = new URLSearchParams({
+        title: title,
+        body: issueBody,
+        labels: labels.join(',')
+      });
+
+      const issueUrl = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/issues/new?${params.toString()}`;
+
+      // Open GitHub in new tab
+      window.open(issueUrl, '_blank');
     });
   </script>
 </body>
