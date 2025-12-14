@@ -222,6 +222,12 @@ export class AgentRunner {
 
       if (iteration >= MAX_ITERATIONS) {
         logger.warn(`Agent ${agentName} hit max iterations`, { iterations: MAX_ITERATIONS });
+
+        // If we hit max iterations with no meaningful output, fail the agent
+        if (!finalOutput.trim()) {
+          throw new Error(`Agent ${agentName} reached maximum iterations (${MAX_ITERATIONS}) without producing output. ${totalTokens.toLocaleString()} tokens consumed.`);
+        }
+
         finalOutput += '\n\n[Note: Reached maximum tool use iterations]';
       }
 

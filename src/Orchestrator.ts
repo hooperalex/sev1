@@ -888,20 +888,26 @@ export class Orchestrator {
 
   /**
    * Check if pipeline should halt based on agent consensus
-   * NEVER blocks - pipeline always continues automatically
+   * Halts on REDIRECT/INVALID intake decisions, continues otherwise
    */
   private async checkForEarlyTermination(taskState: TaskState, currentStageIndex: number): Promise<boolean> {
-    // NEVER halt the pipeline - always continue automatically
-    // Log decisions for visibility but don't block
-
     if (currentStageIndex === 0) {
       const intakeOutput = taskState.stages[0].output || '';
       const intakeDecision = this.extractDecision(intakeOutput);
 
-      logger.info('Intake decision (continuing automatically)', {
+      logger.info('Intake decision', {
         taskId: taskState.taskId,
         decision: intakeDecision
       });
+
+      // Halt pipeline on REDIRECT or INVALID decisions
+      if (intakeDecision === 'REDIRECT' || intakeDecision === 'INVALID') {
+        logger.info('Halting pipeline due to intake decision', {
+          taskId: taskState.taskId,
+          decision: intakeDecision
+        });
+        return true;
+      }
 
       // Check for issue decomposition (if enabled)
       if (process.env.ENABLE_AUTO_DECOMPOSITION === 'true') {

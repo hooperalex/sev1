@@ -62,11 +62,64 @@ export class VercelClient {
   private projectId: string;
   private orgId: string;
   private baseUrl = 'https://api.vercel.com';
+  private githubRepoId: number | null = null; // Cache the numeric repo ID
 
   constructor(token: string, projectId: string, orgId: string) {
     this.token = token;
     this.projectId = projectId;
     this.orgId = orgId;
+  }
+
+  /**
+   * Get the numeric GitHub repository ID (required by Vercel API)
+   * This fetches from GitHub API and caches the result
+   */
+  private async getGitHubRepoId(): Promise<number> {
+    // Return cached value if available
+    if (this.githubRepoId !== null) {
+      return this.githubRepoId;
+    }
+
+    // Check for explicit env var first
+    const explicitRepoId = process.env.GITHUB_REPO_ID;
+    if (explicitRepoId) {
+      this.githubRepoId = parseInt(explicitRepoId, 10);
+      if (!isNaN(this.githubRepoId)) {
+        logger.info('Using explicit GITHUB_REPO_ID', { repoId: this.githubRepoId });
+        return this.githubRepoId;
+      }
+    }
+
+    // Fetch from GitHub API
+    const githubOwner = process.env.GITHUB_OWNER;
+    const githubRepo = process.env.GITHUB_REPO;
+    const githubToken = process.env.GITHUB_TOKEN;
+
+    if (!githubOwner || !githubRepo) {
+      throw new Error('GITHUB_OWNER and GITHUB_REPO environment variables are required');
+    }
+
+    try {
+      const response = await fetch(`https://api.github.com/repos/${githubOwner}/${githubRepo}`, {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'AI-Team-MVP',
+          ...(githubToken ? { 'Authorization': `Bearer ${githubToken}` } : {})
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`GitHub API error: ${response.status}`);
+      }
+
+      const repoData = await response.json() as { id: number };
+      this.githubRepoId = repoData.id;
+      logger.info('Fetched GitHub repo ID', { owner: githubOwner, repo: githubRepo, repoId: this.githubRepoId });
+      return this.githubRepoId;
+    } catch (error: any) {
+      logger.error('Failed to fetch GitHub repo ID', { error: error.message });
+      throw new Error(`Failed to fetch GitHub repository ID: ${error.message}`);
+    }
   }
 
   /**
@@ -78,6 +131,9 @@ export class VercelClient {
     try {
       logger.info('Creating Vercel deployment', { gitBranch, target });
 
+      // Get the numeric GitHub repository ID (required by Vercel API)
+      const repoId = await this.getGitHubRepoId();
+
       // For GitHub-connected projects, we need to trigger a deployment
       // using the git source rather than redeploying existing deployments
       const requestBody: any = {
@@ -86,7 +142,7 @@ export class VercelClient {
         gitSource: {
           type: 'github',
           ref: gitBranch,
-          repoId: this.projectId
+          repoId: repoId // Must be numeric GitHub repo ID
         },
         projectSettings: {
           framework: null
@@ -214,6 +270,9 @@ export class VercelClient {
     try {
       logger.info('Triggering GitHub deployment', { gitBranch, target });
 
+      // Get the numeric GitHub repository ID (required by Vercel API)
+      const repoId = await this.getGitHubRepoId();
+
       // For GitHub-connected projects, the most reliable way is to let Vercel
       // automatically detect the push. We'll create a minimal deployment request
       // that references the GitHub source.
@@ -224,7 +283,8 @@ export class VercelClient {
         // Use gitSource format for GitHub-connected projects
         gitSource: {
           type: 'github',
-          ref: gitBranch
+          ref: gitBranch,
+          repoId: repoId // Must be numeric GitHub repo ID
         }
       };
 
