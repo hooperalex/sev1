@@ -16,6 +16,7 @@ import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
 import { WikiClient } from './integrations/WikiClient';
 import { VercelClient } from './integrations/VercelClient';
+import { DiscordClient } from './integrations/DiscordClient';
 import { DecompositionManager } from './DecompositionManager';
 import { parseArchivistOutput, applySectionUpdate } from './utils/parseArchivistOutput';
 import { logger } from './utils/logger';
@@ -92,6 +93,7 @@ export class Orchestrator {
   private gitClient: GitClient;
   private wikiClient: WikiClient | null;
   private vercelClient: VercelClient | null;
+  private discordClient: DiscordClient | null;
   private decompositionManager: DecompositionManager;
   private tasksDir: string;
   private config: PipelineConfig;
@@ -102,6 +104,7 @@ export class Orchestrator {
     gitClient: GitClient,
     wikiClient: WikiClient | null = null,
     vercelClient: VercelClient | null = null,
+    discordClient: DiscordClient | null = null,
     tasksDir: string = './tasks'
   ) {
     this.agentRunner = agentRunner;
@@ -109,6 +112,7 @@ export class Orchestrator {
     this.gitClient = gitClient;
     this.wikiClient = wikiClient;
     this.vercelClient = vercelClient;
+    this.discordClient = discordClient;
     this.decompositionManager = new DecompositionManager(githubClient, agentRunner);
     this.tasksDir = tasksDir;
 
@@ -240,6 +244,11 @@ export class Orchestrator {
     }
 
     logger.info('Task created', { taskId, issueTitle: issue.title, branchName, isRerun, resumeStage });
+
+    // Send Discord notification for pipeline start
+    if (this.discordClient) {
+      await this.discordClient.notifyPipelineStart(issueNumber, issue.title, branchName);
+    }
 
     return taskState;
   }
@@ -740,6 +749,17 @@ export class Orchestrator {
 
       logger.info('GitHub notification sent', { stage: stageConfig.name, type: 'complete' });
 
+      // Send Discord notification for stage completion
+      if (this.discordClient) {
+        await this.discordClient.notifyStageComplete(
+          taskState.issueNumber,
+          stageConfig.name,
+          stageIndex,
+          this.config.stages.length,
+          summary
+        );
+      }
+
     } catch (error: any) {
       logger.warn('Failed to send GitHub notification', { error: error.message });
     }
@@ -764,6 +784,16 @@ export class Orchestrator {
       await this.githubClient.addComment(taskState.issueNumber, comment);
 
       logger.info('GitHub notification sent', { stage: stageConfig.name, type: 'failed' });
+
+      // Send Discord notification for stage failure
+      if (this.discordClient) {
+        await this.discordClient.notifyPipelineFailed(
+          taskState.issueNumber,
+          taskState.issueTitle,
+          stageConfig.name,
+          error
+        );
+      }
 
     } catch (err: any) {
       logger.warn('Failed to send GitHub notification', { error: err.message });
@@ -806,11 +836,7 @@ export class Orchestrator {
           taskState.issueNumber,
           taskState.issueTitle,
           taskState.prUrl,
-          {
-            totalDuration,
-            totalTokens,
-            estimatedCost
-          }
+          taskState.productionDeployment?.deploymentUrl
         );
       }
 
@@ -972,7 +998,8 @@ export class Orchestrator {
         taskState.issueNumber,
         stageConfig.name,
         retryCount + 1,
-        3
+        3,
+        errorMessage
       );
     }
 
@@ -1190,8 +1217,8 @@ export class Orchestrator {
         await this.discordClient.notifyAwaitingApproval(
           taskState.issueNumber,
           taskState.issueTitle,
-          stageConfig.name,
-          taskState.issueUrl
+          taskState.prUrl || taskState.issueUrl,
+          'closure'
         );
       }
 
