@@ -71,6 +71,7 @@ async function main() {
       gitClient,
       null,  // No wiki client
       null,  // No vercel client
+      null,  // No discord client
       './tasks'
     );
 

@@ -771,7 +771,7 @@ export class Orchestrator {
   }
 
   /**
-   * Notify GitHub when pipeline completes
+   * Notify GitHub and Discord when pipeline completes
    */
   private async notifyPipelineComplete(taskState: TaskState): Promise<void> {
     try {
@@ -799,6 +799,20 @@ export class Orchestrator {
         `Please review the retrospective document for a complete summary of the work performed.`;
 
       await this.githubClient.addComment(taskState.issueNumber, comment);
+
+      // Discord notification for pipeline completion
+      if (this.discordClient) {
+        await this.discordClient.notifyPipelineComplete(
+          taskState.issueNumber,
+          taskState.issueTitle,
+          taskState.prUrl,
+          {
+            totalDuration,
+            totalTokens,
+            estimatedCost
+          }
+        );
+      }
 
       logger.info('GitHub notification sent', { type: 'pipeline-complete' });
 
@@ -951,6 +965,16 @@ export class Orchestrator {
       `Stage **${stageConfig.name}** failed with error:\n\`\`\`\n${errorMessage}\n\`\`\`\n\n` +
       `Analyzing error and attempting automatic fix...`
     );
+
+    // Discord notification for self-healing
+    if (this.discordClient) {
+      await this.discordClient.notifySelfHealing(
+        taskState.issueNumber,
+        stageConfig.name,
+        retryCount + 1,
+        3
+      );
+    }
 
     try {
       // Call the Debugger agent to analyze and fix
@@ -1116,7 +1140,7 @@ export class Orchestrator {
   }
 
   /**
-   * Notify about early termination and request human approval
+   * Notify about early termination and request human approval (GitHub + Discord)
    */
   private async notifyEarlyTermination(taskState: TaskState, stageIndex: number): Promise<void> {
     try {
@@ -1160,6 +1184,16 @@ export class Orchestrator {
 
       await this.githubClient.addComment(taskState.issueNumber, fullComment);
       await this.githubClient.addLabel(taskState.issueNumber, 'awaiting-human-review');
+
+      // Discord notification for approval needed
+      if (this.discordClient) {
+        await this.discordClient.notifyAwaitingApproval(
+          taskState.issueNumber,
+          taskState.issueTitle,
+          stageConfig.name,
+          taskState.issueUrl
+        );
+      }
 
       logger.info('Early termination notification sent', { taskId: taskState.taskId });
 

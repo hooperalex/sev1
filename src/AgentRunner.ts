@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from './utils/logger';
 import { WikiClient } from './integrations/WikiClient';
+import { MemoryClient } from './integrations/MemoryClient';
 import { ALL_AGENT_TOOLS } from './tools/fileTools';
 import { ToolExecutor } from './tools/ToolExecutor';
 import type { TodoState } from './tools/todoTools';
@@ -16,6 +17,7 @@ export interface AgentContext {
   taskId?: string;
   wikiSummary?: string;
   wikiSearchResults?: string;
+  memoryContext?: string;     // Relevant knowledge from previous issues
   todoState?: TodoState;      // Todo state from previous stage
   stageIndex?: number;        // Current stage index
   [key: string]: any;
@@ -35,11 +37,18 @@ export class AgentRunner {
   private client: Anthropic;
   private agentsDir: string;
   private wikiClient: WikiClient | null;
+  private memoryClient: MemoryClient | null;
 
-  constructor(apiKey: string, agentsDir: string = './.claude/agents', wikiClient: WikiClient | null = null) {
+  constructor(
+    apiKey: string,
+    agentsDir: string = './.claude/agents',
+    wikiClient: WikiClient | null = null,
+    memoryClient: MemoryClient | null = null
+  ) {
     this.client = new Anthropic({ apiKey });
     this.agentsDir = agentsDir;
     this.wikiClient = wikiClient;
+    this.memoryClient = memoryClient;
   }
 
   /**
@@ -64,6 +73,25 @@ export class AgentRunner {
           });
         } catch (error: any) {
           logger.warn(`Failed to get wiki summary for ${agentName}`, {
+            error: error.message
+          });
+        }
+      }
+
+      // Enrich context with memory from previous issues
+      if (this.memoryClient && !context.memoryContext && context.issueTitle) {
+        try {
+          context.memoryContext = await this.memoryClient.buildContextForAgent(
+            context.issueTitle,
+            context.issueBody || ''
+          );
+          if (context.memoryContext) {
+            logger.info(`Injected memory context for ${agentName}`, {
+              contextLength: context.memoryContext.length
+            });
+          }
+        } catch (error: any) {
+          logger.warn(`Failed to get memory context for ${agentName}`, {
             error: error.message
           });
         }
@@ -350,6 +378,15 @@ export class AgentRunner {
       prompt += `WIKI SEARCH RESULTS:\n`;
       prompt += `${'='.repeat(60)}\n`;
       prompt += `${context.wikiSearchResults}\n`;
+    }
+
+    // Add memory context from previous issues
+    if (context.memoryContext) {
+      prompt += `\n${'='.repeat(60)}\n`;
+      prompt += `KNOWLEDGE FROM PREVIOUS ISSUES:\n`;
+      prompt += `${'='.repeat(60)}\n`;
+      prompt += `${context.memoryContext}\n`;
+      prompt += `\nNOTE: Use this knowledge to inform your analysis, but verify it applies to the current issue.\n`;
     }
 
     if (context.previousOutput) {

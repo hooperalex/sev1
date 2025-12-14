@@ -103,6 +103,7 @@ async function main() {
       gitClient,
       wikiClient,
       vercelClient,
+      null,  // No discord client for single issue script
       './tasks'
     );
 

@@ -6,6 +6,7 @@ import * as dotenv from 'dotenv';
 import { AgentRunner } from './AgentRunner';
 import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
+import { DiscordClient } from './integrations/DiscordClient';
 import { Orchestrator } from './Orchestrator';
 import { logger } from './utils/logger';
 
@@ -47,12 +48,18 @@ async function main() {
       null  // No wiki client for continue script
     );
 
+    // Initialize DiscordClient if configuration is available
+    const discordClient = (process.env.DISCORD_TOKEN && process.env.DISCORD_CHAN_ID)
+      ? new DiscordClient(process.env.DISCORD_TOKEN, process.env.DISCORD_CHAN_ID)
+      : null;
+
     const orchestrator = new Orchestrator(
       agentRunner,
       githubClient,
       gitClient,
       null,  // No wiki client
       null,  // No vercel client
+      discordClient,
       './tasks'
     );
 

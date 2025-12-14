@@ -11,6 +11,8 @@ import { GitHubClient } from './integrations/GitHubClient';
 import { GitClient } from './integrations/GitClient';
 import { WikiClient } from './integrations/WikiClient';
 import { VercelClient } from './integrations/VercelClient';
+import { DiscordClient } from './integrations/DiscordClient';
+import { MemoryClient } from './integrations/MemoryClient';
 import { Orchestrator } from './Orchestrator';
 import { logger } from './utils/logger';
 import * as fs from 'fs';
@@ -31,6 +33,8 @@ class IssueWatcher {
   private gitClient: GitClient;
   private wikiClient: WikiClient | null;
   private vercelClient: VercelClient | null;
+  private discordClient: DiscordClient | null;
+  private memoryClient: MemoryClient | null;
   private orchestrator: Orchestrator;
   private state: WatcherState;
   private isRunning: boolean = false;
@@ -77,10 +81,27 @@ class IssueWatcher {
       logger.info('Vercel configuration not found, running without Vercel integration');
     }
 
+    // Initialize DiscordClient if configuration is available
+    if (process.env.DISCORD_TOKEN && process.env.DISCORD_CHAN_ID) {
+      this.discordClient = new DiscordClient(
+        process.env.DISCORD_TOKEN,
+        process.env.DISCORD_CHAN_ID
+      );
+      logger.info('DiscordClient initialized for pipeline notifications');
+    } else {
+      this.discordClient = null;
+      logger.info('Discord configuration not found, running without Discord notifications');
+    }
+
+    // Initialize MemoryClient for agent knowledge persistence
+    this.memoryClient = new MemoryClient('./knowledge/agent-memory.json');
+    logger.info('MemoryClient initialized for agent knowledge persistence');
+
     const agentRunner = new AgentRunner(
       process.env.ANTHROPIC_API_KEY!,
       './.claude/agents',
-      this.wikiClient
+      this.wikiClient,
+      this.memoryClient
     );
 
     this.orchestrator = new Orchestrator(
@@ -89,6 +110,7 @@ class IssueWatcher {
       this.gitClient,
       this.wikiClient,
       this.vercelClient,
+      this.discordClient,
       './tasks'
     );
 
