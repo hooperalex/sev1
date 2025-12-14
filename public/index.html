@@ -3,9 +3,819 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SevOne AI</title>
+  <title>SevOne.ai - Your AI Support Team</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: rgba(255, 255, 255, 0.03);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-primary: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.6);
+      --text-muted: rgba(255, 255, 255, 0.4);
+      --accent-purple: #8b5cf6;
+      --accent-blue: #3b82f6;
+      --accent-cyan: #06b6d4;
+      --accent-pink: #ec4899;
+      --accent-green: #10b981;
+      --accent-orange: #f59e0b;
+      --glow-purple: rgba(139, 92, 246, 0.4);
+      --glow-blue: rgba(59, 130, 246, 0.4);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Animated Background */
+    .bg-gradient {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 50%, rgba(6, 182, 212, 0.08) 0%, transparent 70%),
+        var(--bg-primary);
+    }
+
+    .particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: -1;
+      overflow: hidden;
+    }
+
+    .particle {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: var(--accent-purple);
+      border-radius: 50%;
+      opacity: 0.3;
+      animation: float 20s infinite ease-in-out;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(100vh) rotate(0deg); opacity: 0; }
+      10% { opacity: 0.3; }
+      90% { opacity: 0.3; }
+      100% { transform: translateY(-100vh) rotate(720deg); opacity: 0; }
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 20px 0;
+      background: rgba(10, 10, 15, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    nav .container {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo span {
+      font-weight: 300;
+      opacity: 0.8;
+    }
+
+    .nav-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent-green);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.2); }
+    }
+
+    /* Hero Section */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 100px;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
+    .hero-badge .dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent-green);
+      border-radius: 50%;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 700;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      max-width: 900px;
+    }
+
+    .hero h1 .gradient {
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero p {
+      font-size: 1.25rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin-bottom: 48px;
+    }
+
+    .hero-visual {
+      margin-top: 60px;
+      width: 100%;
+      max-width: 800px;
+    }
+
+    /* Pipeline Visualization */
+    .pipeline-flow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      backdrop-filter: blur(10px);
+    }
+
+    .pipeline-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      transition: all 0.3s ease;
+      min-width: 80px;
+    }
+
+    .pipeline-node:hover {
+      transform: translateY(-4px);
+      border-color: var(--accent-purple);
+      box-shadow: 0 8px 32px var(--glow-purple);
+    }
+
+    .pipeline-node .icon {
+      font-size: 1.5rem;
+    }
+
+    .pipeline-node .label {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .pipeline-arrow {
+      color: var(--text-muted);
+      font-size: 1.25rem;
+    }
+
+    /* Section Styling */
+    section {
+      padding: 120px 0;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+
+    .section-header h2 {
+      font-size: 2.5rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .section-header p {
+      font-size: 1.125rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Agent Cards */
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+
+    .agent-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      padding: 32px;
+      transition: all 0.4s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .agent-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--card-accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .agent-card:hover {
+      transform: translateY(-8px);
+      border-color: rgba(255, 255, 255, 0.15);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+
+    .agent-card:hover::before {
+      opacity: 1;
+    }
+
+    .agent-card.intake { --card-accent: var(--accent-green); }
+    .agent-card.detective { --card-accent: var(--accent-blue); }
+    .agent-card.archaeologist { --card-accent: var(--accent-orange); }
+    .agent-card.surgeon { --card-accent: var(--accent-pink); }
+    .agent-card.critic { --card-accent: var(--accent-purple); }
+    .agent-card.guardian { --card-accent: var(--accent-cyan); }
+
+    .agent-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      margin-bottom: 20px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+    }
+
+    .agent-card.intake .agent-avatar { background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); }
+    .agent-card.detective .agent-avatar { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.3); }
+    .agent-card.archaeologist .agent-avatar { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.3); }
+    .agent-card.surgeon .agent-avatar { background: rgba(236, 72, 153, 0.1); border-color: rgba(236, 72, 153, 0.3); }
+    .agent-card.critic .agent-avatar { background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.3); }
+    .agent-card.guardian .agent-avatar { background: rgba(6, 182, 212, 0.1); border-color: rgba(6, 182, 212, 0.3); }
+
+    .agent-name {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .agent-role {
+      font-size: 0.875rem;
+      color: var(--card-accent);
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+
+    .agent-description {
+      color: var(--text-secondary);
+      font-size: 0.9375rem;
+      line-height: 1.7;
+    }
+
+    .agent-quote {
+      margin-top: 20px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    /* How It Works */
+    .how-it-works {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 48px;
+    }
+
+    @media (max-width: 768px) {
+      .steps {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .step {
+      text-align: center;
+    }
+
+    .step-number {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.25rem;
+      margin: 0 auto 24px;
+    }
+
+    .step h3 {
+      font-size: 1.25rem;
+      margin-bottom: 12px;
+    }
+
+    .step p {
+      color: var(--text-secondary);
+    }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 32px;
+      margin-top: 80px;
+    }
+
+    @media (max-width: 768px) {
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 3rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .stat-label {
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+
+    /* Terminal Demo */
+    .terminal {
+      background: #0d0d0d;
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-top: 48px;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .terminal-header {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.red { background: #ff5f57; }
+    .terminal-dot.yellow { background: #febc2e; }
+    .terminal-dot.green { background: #28c840; }
+
+    .terminal-body {
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+      line-height: 1.8;
+    }
+
+    .terminal-line {
+      margin-bottom: 8px;
+    }
+
+    .terminal-prompt {
+      color: var(--accent-green);
+    }
+
+    .terminal-command {
+      color: var(--text-primary);
+    }
+
+    .terminal-output {
+      color: var(--text-secondary);
+    }
+
+    .terminal-agent {
+      color: var(--accent-purple);
+    }
+
+    .terminal-success {
+      color: var(--accent-green);
+    }
+
+    .typing-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 18px;
+      background: var(--accent-green);
+      animation: blink 1s infinite;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Footer */
+    footer {
+      padding: 48px 0;
+      text-align: center;
+      border-top: 1px solid var(--border-color);
+    }
+
+    footer p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    footer a {
+      color: var(--accent-purple);
+      text-decoration: none;
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .fade-in-up {
+      animation: fadeInUp 0.8s ease forwards;
+    }
+
+    .delay-1 { animation-delay: 0.1s; }
+    .delay-2 { animation-delay: 0.2s; }
+    .delay-3 { animation-delay: 0.3s; }
+    .delay-4 { animation-delay: 0.4s; }
+    .delay-5 { animation-delay: 0.5s; }
+    .delay-6 { animation-delay: 0.6s; }
+  </style>
 </head>
 <body>
-  <h1>HELLO WORLD!</h1>
+  <div class="bg-gradient"></div>
+  <div class="particles" id="particles"></div>
+
+  <nav>
+    <div class="container">
+      <div class="logo">SevOne<span>.ai</span></div>
+      <div class="nav-status">
+        <span class="status-dot"></span>
+        <span>16 agents online</span>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-badge">
+      <span class="dot"></span>
+      <span>AI-Powered Support Pipeline</span>
+    </div>
+    <h1>Meet Your <span class="gradient">AI Support Team</span></h1>
+    <p>We're not just a tool. We're a team of specialized AI agents working together to understand, investigate, fix, and deploy solutions to your issues.</p>
+
+    <div class="hero-visual">
+      <div class="pipeline-flow">
+        <div class="pipeline-node">
+          <span class="icon">📥</span>
+          <span class="label">Intake</span>
+        </div>
+        <span class="pipeline-arrow">→</span>
+        <div class="pipeline-node">
+          <span class="icon">🔍</span>
+          <span class="label">Detective</span>
+        </div>
+        <span class="pipeline-arrow">→</span>
+        <div class="pipeline-node">
+          <span class="icon">⛏️</span>
+          <span class="label">Archaeologist</span>
+        </div>
+        <span class="pipeline-arrow">→</span>
+        <div class="pipeline-node">
+          <span class="icon">🔧</span>
+          <span class="label">Surgeon</span>
+        </div>
+        <span class="pipeline-arrow">→</span>
+        <div class="pipeline-node">
+          <span class="icon">👁️</span>
+          <span class="label">Critic</span>
+        </div>
+        <span class="pipeline-arrow">→</span>
+        <div class="pipeline-node">
+          <span class="icon">🛡️</span>
+          <span class="label">Guardian</span>
+        </div>
+        <span class="pipeline-arrow">→</span>
+        <div class="pipeline-node">
+          <span class="icon">✨</span>
+          <span class="label">Resolved</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="container">
+    <div class="section-header">
+      <h2>The Team</h2>
+      <p>Each agent has a unique personality and specialty. Together, we handle your issues from report to resolution.</p>
+    </div>
+
+    <div class="agents-grid">
+      <div class="agent-card intake fade-in-up delay-1">
+        <div class="agent-avatar">📥</div>
+        <div class="agent-name">Intake</div>
+        <div class="agent-role">The Greeter</div>
+        <p class="agent-description">I'm the first one you'll meet. I read every issue that comes in, validate the requirements, and figure out exactly what kind of help you need.</p>
+        <div class="agent-quote">"Tell me what's wrong. I'm listening."</div>
+      </div>
+
+      <div class="agent-card detective fade-in-up delay-2">
+        <div class="agent-avatar">🔍</div>
+        <div class="agent-name">Detective</div>
+        <div class="agent-role">The Investigator</div>
+        <p class="agent-description">I analyze every bug report with a critical eye. I assess severity, identify affected components, and build a complete picture before we proceed.</p>
+        <div class="agent-quote">"Every bug leaves a trail. I find it."</div>
+      </div>
+
+      <div class="agent-card archaeologist fade-in-up delay-3">
+        <div class="agent-avatar">⛏️</div>
+        <div class="agent-name">Archaeologist</div>
+        <div class="agent-role">The Root Cause Hunter</div>
+        <p class="agent-description">I dig deep into the codebase and git history. I don't just find where bugs happen - I uncover why they exist in the first place.</p>
+        <div class="agent-quote">"The answer is always in the history."</div>
+      </div>
+
+      <div class="agent-card surgeon fade-in-up delay-4">
+        <div class="agent-avatar">🔧</div>
+        <div class="agent-name">Surgeon</div>
+        <div class="agent-role">The Implementer</div>
+        <p class="agent-description">I write the code. Give me an issue, and I'll implement the fix. I don't hesitate, I don't gatekeep - I build solutions.</p>
+        <div class="agent-quote">"Less talking, more shipping."</div>
+      </div>
+
+      <div class="agent-card critic fade-in-up delay-5">
+        <div class="agent-avatar">👁️</div>
+        <div class="agent-name">Critic</div>
+        <div class="agent-role">The Perfectionist</div>
+        <p class="agent-description">Nothing gets past me without a thorough review. I check for bugs, security issues, and make sure the code is production-ready.</p>
+        <div class="agent-quote">"Good enough isn't good enough."</div>
+      </div>
+
+      <div class="agent-card guardian fade-in-up delay-6">
+        <div class="agent-avatar">🛡️</div>
+        <div class="agent-name">Guardian</div>
+        <div class="agent-role">The Protector</div>
+        <p class="agent-description">After deployment, I watch over production. I monitor health, detect issues early, and make sure your fix is actually working for real users.</p>
+        <div class="agent-quote">"I never sleep. Your uptime depends on it."</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="how-it-works">
+    <div class="container">
+      <div class="section-header">
+        <h2>How We Work</h2>
+        <p>Drop an issue, we handle everything else.</p>
+      </div>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-number">1</div>
+          <h3>Report the Issue</h3>
+          <p>Create a GitHub issue describing what's wrong. We'll pick it up automatically.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">2</div>
+          <h3>We Investigate & Fix</h3>
+          <p>Our agents analyze, locate the root cause, implement the fix, and review the code.</p>
+        </div>
+        <div class="step">
+          <div class="step-number">3</div>
+          <h3>Deploy & Monitor</h3>
+          <p>We deploy to production and monitor to ensure everything works perfectly.</p>
+        </div>
+      </div>
+
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+        </div>
+        <div class="terminal-body">
+          <div class="terminal-line">
+            <span class="terminal-prompt">$</span>
+            <span class="terminal-command"> New issue detected: #42</span>
+          </div>
+          <div class="terminal-line">
+            <span class="terminal-agent">[Intake]</span>
+            <span class="terminal-output"> Validating requirements... PROCEED</span>
+          </div>
+          <div class="terminal-line">
+            <span class="terminal-agent">[Detective]</span>
+            <span class="terminal-output"> Analyzing bug... P1 severity identified</span>
+          </div>
+          <div class="terminal-line">
+            <span class="terminal-agent">[Archaeologist]</span>
+            <span class="terminal-output"> Root cause found in auth.ts:142</span>
+          </div>
+          <div class="terminal-line">
+            <span class="terminal-agent">[Surgeon]</span>
+            <span class="terminal-output"> Implementing fix... 3 files modified</span>
+          </div>
+          <div class="terminal-line">
+            <span class="terminal-agent">[Critic]</span>
+            <span class="terminal-output"> Code review passed</span>
+          </div>
+          <div class="terminal-line">
+            <span class="terminal-agent">[Guardian]</span>
+            <span class="terminal-success"> Production healthy. Issue resolved.</span>
+            <span class="typing-cursor"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value">16</div>
+          <div class="stat-label">Specialized Agents</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">14</div>
+          <div class="stat-label">Pipeline Stages</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">24/7</div>
+          <div class="stat-label">Always Watching</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value">0</div>
+          <div class="stat-label">Human Bottlenecks</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <p>Built by AI, for humans. <a href="https://github.com/hooperalex/sev1">View the source</a>.</p>
+    </div>
+  </footer>
+
+  <script>
+    // Create floating particles
+    const particlesContainer = document.getElementById('particles');
+    const particleCount = 30;
+
+    for (let i = 0; i < particleCount; i++) {
+      const particle = document.createElement('div');
+      particle.className = 'particle';
+      particle.style.left = Math.random() * 100 + '%';
+      particle.style.animationDuration = (15 + Math.random() * 20) + 's';
+      particle.style.animationDelay = Math.random() * 20 + 's';
+      particle.style.width = (2 + Math.random() * 4) + 'px';
+      particle.style.height = particle.style.width;
+
+      // Random colors
+      const colors = ['#8b5cf6', '#3b82f6', '#06b6d4', '#10b981'];
+      particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+
+      particlesContainer.appendChild(particle);
+    }
+
+    // Animate elements on scroll
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.style.opacity = '1';
+          entry.target.style.transform = 'translateY(0)';
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('.agent-card').forEach(card => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(30px)';
+      card.style.transition = 'all 0.6s ease';
+      observer.observe(card);
+    });
+  </script>
 </body>
 </html>
