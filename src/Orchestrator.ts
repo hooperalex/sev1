@@ -143,7 +143,7 @@ export class Orchestrator {
   }
 
   /**
-   * Start a new task from a GitHub issue
+   * Start a new task from a GitHub issue (or resume from checkpoint)
    */
   async startTask(issueNumber: number): Promise<TaskState> {
     logger.info('Starting new task', { issueNumber });
@@ -161,17 +161,6 @@ export class Orchestrator {
     // Extract labels
     const issueLabels = issue.labels.map(l => l.name);
 
-    // Check if this is a re-run (has 'failed' label or previous comments from agents)
-    const isRerun = issueLabels.includes('failed') ||
-                    comments.some(c => c.user.login === 'github-actions[bot]');
-
-    // Always start from stage 0 - agents will read previous comments for context
-    // This ensures full pipeline execution and proper context passing between stages
-    const resumeStage = 0;
-    if (isRerun) {
-      logger.info('Re-run detected - starting fresh but agents will read previous comments for context');
-    }
-
     // Create branch name (sanitize issue title for branch name)
     const branchName = `fix/issue-${issueNumber}-${issue.title
       .toLowerCase()
@@ -179,71 +168,146 @@ export class Orchestrator {
       .substring(0, 50)
       .replace(/-+$/, '')}`;
 
-    // Create task state
     const taskId = `ISSUE-${issueNumber}`;
-    const taskState: TaskState = {
-      taskId,
-      issueNumber,
-      issueTitle: issue.title,
-      issueBody: issue.body || 'No description provided',
-      issueUrl: issue.html_url,
-      issueComments,
-      issueLabels,
-      branchName,
-      currentStage: resumeStage,
-      stages: this.config.stages.map((stage) => ({
-        stageName: stage.name,
-        agentName: stage.agentName,
-        status: 'pending' as const
-      })),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
 
-    // Save initial state
+    // ============================================================
+    // CHECKPOINT/RESUME: Check for existing task state
+    // ============================================================
+    const existingState = this.tryLoadExistingTaskState(taskId);
+    let taskState: TaskState;
+    let resumeStage = 0;
+    let isResume = false;
+
+    if (existingState && existingState.status === 'failed') {
+      // Find the last completed stage to resume from
+      const lastCompletedIndex = this.findLastCompletedStage(existingState);
+
+      if (lastCompletedIndex >= 0) {
+        // Resume from the stage AFTER the last completed one
+        resumeStage = lastCompletedIndex + 1;
+        isResume = true;
+
+        logger.info('Resuming from checkpoint', {
+          taskId,
+          lastCompletedStage: existingState.stages[lastCompletedIndex]?.stageName,
+          resumingFromStage: this.config.stages[resumeStage]?.name,
+          completedStages: lastCompletedIndex + 1,
+          totalStages: this.config.stages.length
+        });
+
+        // Preserve existing state but update for resume
+        taskState = {
+          ...existingState,
+          issueComments, // Update with latest comments
+          issueLabels,
+          currentStage: resumeStage,
+          status: 'pending',
+          error: undefined,
+          updatedAt: new Date().toISOString()
+        };
+
+        // Reset failed stage to pending, keep completed stages
+        if (taskState.stages[resumeStage]) {
+          taskState.stages[resumeStage].status = 'pending';
+          taskState.stages[resumeStage].error = undefined;
+        }
+      } else {
+        // No completed stages, start fresh
+        taskState = this.createFreshTaskState(taskId, issueNumber, issue, issueComments, issueLabels, branchName);
+      }
+    } else {
+      // No existing state or not failed - start fresh
+      taskState = this.createFreshTaskState(taskId, issueNumber, issue, issueComments, issueLabels, branchName);
+    }
+
+    // ============================================================
+    // EARLY VALIDATION: Check prerequisites before burning tokens
+    // ============================================================
+    const validationErrors = await this.validatePipelinePrerequisites(taskState);
+    if (validationErrors.length > 0) {
+      const errorMsg = `Pipeline prerequisites not met:\n${validationErrors.map(e => `  - ${e}`).join('\n')}`;
+      logger.error('Pipeline validation failed', { taskId, errors: validationErrors });
+
+      await this.githubClient.addComment(
+        issueNumber,
+        `❌ **Pipeline Cannot Start**\n\n${errorMsg}\n\nPlease fix these issues and re-run.`
+      );
+
+      throw new Error(errorMsg);
+    }
+
+    // Save initial/updated state
     this.saveTaskState(taskState);
 
     // Step 1: Create Git branch for this issue (or use existing)
     logger.info('Creating Git branch', { branchName });
     try {
-      await this.gitClient.createBranch(branchName);
-      logger.info('Branch created successfully', { branchName });
+      if (isResume) {
+        // For resume, checkout existing branch instead of creating new
+        await this.gitClient.checkout(branchName);
+        logger.info('Checked out existing branch for resume', { branchName });
 
-      // Only comment on new runs, not re-runs
-      if (!isRerun) {
+        const completedStages = resumeStage;
+        const remainingStages = this.config.stages.length - resumeStage;
+        await this.githubClient.addComment(
+          issueNumber,
+          `🔄 **Pipeline Resuming from Checkpoint**\n\n` +
+          `✅ **Completed:** ${completedStages} stages preserved\n` +
+          `▶️ **Resuming at:** ${this.config.stages[resumeStage]?.name || 'Unknown'}\n` +
+          `⏳ **Remaining:** ${remainingStages} stages\n\n` +
+          `Previous work has been preserved - not starting from scratch!`
+        );
+      } else {
+        await this.gitClient.createBranch(branchName);
+        logger.info('Branch created successfully', { branchName });
+
         await this.githubClient.addComment(
           issueNumber,
           `🌿 **Branch Created**\n\n` +
           `Created branch \`${branchName}\` for this issue.\n\n` +
           `The AI team will now begin working on the fix...`
         );
-      } else {
-        await this.githubClient.addComment(
-          issueNumber,
-          `🔄 **Pipeline Resumed**\n\n` +
-          `Resuming from Stage ${resumeStage + 1} on branch \`${branchName}\`.\n\n` +
-          `Previous comments and context have been loaded.`
-        );
       }
     } catch (error: any) {
-      logger.error('Failed to create branch', { branchName, error: error.message });
-      throw new Error(`Failed to create branch: ${error.message}`);
-    }
-
-    // Clean up labels from previous runs
-    if (isRerun) {
-      const labelsToRemove = ['failed', 'in-progress', ...issueLabels.filter(l => l.match(/^stage-\d+$/))];
-      for (const label of labelsToRemove) {
+      // If branch already exists on resume, try checkout
+      if (isResume && error.message.includes('already exists')) {
         try {
-          await this.githubClient.removeLabel(issueNumber, label);
-        } catch (e) {
-          // Ignore if label removal fails
+          await this.gitClient.checkout(branchName);
+          logger.info('Checked out existing branch after create failed', { branchName });
+        } catch (checkoutError: any) {
+          logger.error('Failed to checkout existing branch', { branchName, error: checkoutError.message });
+          throw new Error(`Failed to checkout branch: ${checkoutError.message}`);
         }
+      } else if (!isResume && error.message.includes('already exists')) {
+        // For new runs, if branch exists, checkout and continue
+        try {
+          await this.gitClient.checkout(branchName);
+          logger.info('Branch already exists, checked out', { branchName });
+        } catch (checkoutError: any) {
+          logger.error('Failed to checkout existing branch', { branchName, error: checkoutError.message });
+          throw new Error(`Failed to checkout branch: ${checkoutError.message}`);
+        }
+      } else {
+        logger.error('Failed to create branch', { branchName, error: error.message });
+        throw new Error(`Failed to create branch: ${error.message}`);
       }
     }
 
-    logger.info('Task created', { taskId, issueTitle: issue.title, branchName, isRerun, resumeStage });
+    // Clean up labels from previous runs (but not stage labels if resuming)
+    const labelsToRemove = ['failed', 'in-progress'];
+    if (!isResume) {
+      // Only remove stage labels if not resuming
+      labelsToRemove.push(...issueLabels.filter(l => l.match(/^stage-\d+$/)));
+    }
+    for (const label of labelsToRemove) {
+      try {
+        await this.githubClient.removeLabel(issueNumber, label);
+      } catch (e) {
+        // Ignore if label removal fails
+      }
+    }
+
+    logger.info('Task created', { taskId, issueTitle: issue.title, branchName, isResume, resumeStage });
 
     // Send Discord notification for pipeline start
     if (this.discordClient) {
@@ -655,6 +719,134 @@ export class Orchestrator {
 
     const content = fs.readFileSync(statePath, 'utf-8');
     return JSON.parse(content);
+  }
+
+  /**
+   * Try to load existing task state (returns null if not found)
+   */
+  private tryLoadExistingTaskState(taskId: string): TaskState | null {
+    try {
+      const statePath = path.join(this.tasksDir, taskId, 'state.json');
+      if (!fs.existsSync(statePath)) {
+        return null;
+      }
+      const content = fs.readFileSync(statePath, 'utf-8');
+      return JSON.parse(content);
+    } catch (error) {
+      logger.warn('Failed to load existing task state', { taskId, error });
+      return null;
+    }
+  }
+
+  /**
+   * Find the index of the last completed stage (-1 if none)
+   */
+  private findLastCompletedStage(taskState: TaskState): number {
+    let lastCompleted = -1;
+    for (let i = 0; i < taskState.stages.length; i++) {
+      if (taskState.stages[i].status === 'completed') {
+        lastCompleted = i;
+      } else if (taskState.stages[i].status === 'failed') {
+        // Stop at the failed stage
+        break;
+      }
+    }
+    return lastCompleted;
+  }
+
+  /**
+   * Create a fresh task state for new runs
+   */
+  private createFreshTaskState(
+    taskId: string,
+    issueNumber: number,
+    issue: any,
+    issueComments: IssueComment[],
+    issueLabels: string[],
+    branchName: string
+  ): TaskState {
+    return {
+      taskId,
+      issueNumber,
+      issueTitle: issue.title,
+      issueBody: issue.body || 'No description provided',
+      issueUrl: issue.html_url,
+      issueComments,
+      issueLabels,
+      branchName,
+      currentStage: 0,
+      stages: this.config.stages.map((stage) => ({
+        stageName: stage.name,
+        agentName: stage.agentName,
+        status: 'pending' as const
+      })),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  /**
+   * Validate pipeline prerequisites before burning tokens
+   * Returns array of error messages (empty if all valid)
+   */
+  private async validatePipelinePrerequisites(taskState: TaskState): Promise<string[]> {
+    const errors: string[] = [];
+
+    // 1. Check task directory is writable
+    try {
+      const taskDir = path.join(this.tasksDir, taskState.taskId);
+      if (!fs.existsSync(taskDir)) {
+        fs.mkdirSync(taskDir, { recursive: true });
+      }
+      // Test write
+      const testFile = path.join(taskDir, '.validate-test');
+      fs.writeFileSync(testFile, 'test', 'utf-8');
+      fs.unlinkSync(testFile);
+    } catch (error: any) {
+      errors.push(`Task directory not writable: ${error.message}`);
+    }
+
+    // 2. Check Vercel client if we'll need deployments (stage 7+)
+    if (!this.vercelClient) {
+      errors.push('Vercel client not configured - deployments will fail at Stage 7');
+    } else {
+      try {
+        // Quick validation that Vercel is accessible
+        const projectName = process.env.VERCEL_PROJECT_NAME;
+        if (!projectName) {
+          errors.push('VERCEL_PROJECT_NAME not set - deployments will fail');
+        }
+      } catch (error: any) {
+        errors.push(`Vercel validation failed: ${error.message}`);
+      }
+    }
+
+    // 3. Check Git is accessible
+    try {
+      await this.gitClient.getCurrentBranch();
+    } catch (error: any) {
+      errors.push(`Git not accessible: ${error.message}`);
+    }
+
+    // 4. Check GitHub client
+    try {
+      await this.githubClient.getIssue(taskState.issueNumber);
+    } catch (error: any) {
+      errors.push(`GitHub API error: ${error.message}`);
+    }
+
+    // 5. Validate artifact paths won't have issues
+    const taskDir = path.join(this.tasksDir, taskState.taskId);
+    for (const stage of this.config.stages) {
+      const artifactPath = path.join(taskDir, stage.artifactName);
+      // Check path doesn't contain taskId twice (the bug we just fixed)
+      if (artifactPath.includes(`${taskState.taskId}${path.sep}${taskState.taskId}`)) {
+        errors.push(`Invalid artifact path detected for ${stage.name}: doubled taskId in path`);
+      }
+    }
+
+    return errors;
   }
 
   /**
@@ -1338,6 +1530,12 @@ export class Orchestrator {
    * Step 4: Process Archivist updates and commit to wiki
    */
   private async processArchivistUpdates(taskState: TaskState, archivistOutput: string): Promise<void> {
+    // Guard: check wikiClient is available
+    if (!this.wikiClient) {
+      logger.warn('Wiki client not configured, skipping Archivist updates', { taskId: taskState.taskId });
+      return;
+    }
+
     try {
       logger.info('Processing Archivist wiki updates', { taskId: taskState.taskId });
 
@@ -1494,7 +1692,7 @@ export class Orchestrator {
 
 **Build Logs (Last 10 lines):**
 \`\`\`
-${logs.logs.slice(-10).map(l => l.message).join('\n')}
+${(logs?.logs || []).slice(-10).map(l => l.message).join('\n')}
 \`\`\`
 `;
 
@@ -1615,7 +1813,7 @@ ${logs.logs.slice(-10).map(l => l.message).join('\n')}
 
 **Build Logs (Last 10 lines):**
 \`\`\`
-${logs.logs.slice(-10).map(l => l.message).join('\n')}
+${(logs?.logs || []).slice(-10).map(l => l.message).join('\n')}
 \`\`\`
 `;
 
