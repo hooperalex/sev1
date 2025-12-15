@@ -210,37 +210,35 @@ export class WikiClient {
   }
 
   /**
-   * Search wiki for a query string
+   * Search wiki for a query string (cross-platform, no grep dependency)
    */
   async searchWiki(query: string): Promise<SearchResult[]> {
     try {
       logger.info('Searching wiki', { query });
 
-      // Use grep to search all markdown files
-      const { stdout } = await execAsync(
-        `grep -rni "${query}" "${this.localPath}" --include="*.md" || true`
-      );
-
-      if (!stdout || stdout.trim() === '') {
-        logger.info('No search results found', { query });
-        return [];
-      }
-
-      const lines = stdout.split('\n').filter(line => line.trim());
+      // Cross-platform search using Node.js fs
       const results: SearchResult[] = [];
+      const queryLower = query.toLowerCase();
 
-      for (const line of lines) {
-        const match = line.match(/^(.+):(\d+):(.+)$/);
-        if (match) {
-          const [, filePath, lineNum, content] = match;
-          const file = path.basename(filePath, '.md');
+      // Get all markdown files
+      const files = fs.readdirSync(this.localPath)
+        .filter(f => f.endsWith('.md') && !f.startsWith('_'));
 
-          results.push({
-            file,
-            lineNumber: parseInt(lineNum, 10),
-            content: content.trim(),
-            relevance: this.calculateRelevance(query, content)
-          });
+      for (const file of files) {
+        const filePath = path.join(this.localPath, file);
+        const content = fs.readFileSync(filePath, 'utf-8');
+        const lines = content.split('\n');
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.toLowerCase().includes(queryLower)) {
+            results.push({
+              file: file.replace('.md', ''),
+              lineNumber: i + 1,
+              content: line.trim(),
+              relevance: this.calculateRelevance(query, line)
+            });
+          }
         }
       }
 
@@ -252,7 +250,8 @@ export class WikiClient {
       return topResults;
     } catch (error: any) {
       logger.error('Failed to search wiki', { query, error: error.message });
-      throw new Error(`Failed to search wiki: ${error.message}`);
+      // Return empty array instead of throwing - graceful degradation
+      return [];
     }
   }
 

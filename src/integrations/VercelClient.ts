@@ -424,9 +424,12 @@ export class VercelClient {
    * Check deployment health
    */
   async checkDeploymentHealth(deploymentUrl: string): Promise<{ healthy: boolean; statusCode: number; responseTime: number }> {
+    // Ensure URL has protocol prefix
+    const url = deploymentUrl.startsWith('http') ? deploymentUrl : `https://${deploymentUrl}`;
+
     try {
       const startTime = Date.now();
-      const response = await fetch(deploymentUrl, {
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'User-Agent': 'AI-Team-Health-Check'
@@ -435,7 +438,7 @@ export class VercelClient {
       const responseTime = Date.now() - startTime;
 
       const healthy = response.ok;
-      logger.info('Deployment health check', { url: deploymentUrl, healthy, statusCode: response.status, responseTime });
+      logger.info('Deployment health check', { url, healthy, statusCode: response.status, responseTime });
 
       return {
         healthy,
@@ -443,7 +446,7 @@ export class VercelClient {
         responseTime
       };
     } catch (error: any) {
-      logger.error('Health check failed', { url: deploymentUrl, error: error.message });
+      logger.error('Health check failed', { url, error: error.message });
       return {
         healthy: false,
         statusCode: 0,
