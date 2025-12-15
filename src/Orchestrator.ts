@@ -1474,7 +1474,8 @@ export class Orchestrator {
       // 6. Append deployment info to staging-deployment.md artifact
       const stageResult = taskState.stages[7]; // Stage 7 = Gatekeeper
       if (stageResult && stageResult.artifactPath) {
-        const artifactPath = path.join(this.tasksDir, taskState.taskId, stageResult.artifactPath);
+        // artifactPath is already the complete path from saveArtifact()
+        const artifactPath = stageResult.artifactPath;
         const deploymentInfo = `
 
 ---
@@ -1594,7 +1595,8 @@ ${logs.logs.slice(-10).map(l => l.message).join('\n')}
       // 6. Append deployment info to deployment-log.md artifact
       const stageResult = taskState.stages[10]; // Stage 10 = Commander
       if (stageResult && stageResult.artifactPath) {
-        const artifactPath = path.join(this.tasksDir, taskState.taskId, stageResult.artifactPath);
+        // artifactPath is already the complete path from saveArtifact()
+        const artifactPath = stageResult.artifactPath;
         const deploymentInfo = `
 
 ---
