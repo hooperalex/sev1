@@ -99,33 +99,35 @@ Evaluate the issue description for:
 ### Step 4: Make Recommendation
 
 **PROCEED** - Issue is ready for the full pipeline
-- Requirements are adequate or better
+- Requirements are adequate or better (70%+)
 - Issue type is clear (bug or approved feature)
 - Priority assigned
 - Ready for Detective agent
 
-**NEEDS_MORE_INFO** - Issue needs clarification
+**NEEDS_MORE_INFO** - Requirements are incomplete but pipeline CONTINUES
 - Requirements are incomplete (40-69%)
 - Missing critical details
-- Pause pipeline and request more information
-- Add "needs-more-info" label
+- **Pipeline continues** - Detective will research and enhance requirements
+- Provide clear "Investigation Notes" for Detective to address
+- Add "needs-enhancement" label
 
-**REQUEST_APPROVAL** - Feature request that needs stakeholder buy-in
+**REQUEST_APPROVAL** - Feature request needs stakeholder buy-in but pipeline CONTINUES
 - Classified as FEATURE with adequate requirements
-- Should not proceed without explicit approval
+- Pipeline continues with full analysis to help inform approval decision
 - Add "pending-approval" label
-- Pause for human decision
 
-**CLOSE** - Issue should be closed
-- Requirements insufficient (<40%) AND author unresponsive
+**CLOSE** - Issue should be closed (pipeline HALTS)
+- Requirements insufficient (<40%) AND clearly cannot be enhanced
 - Classified as INVALID, DUPLICATE, or QUESTION
-- Misfiled (feature request in bug tracker without approval)
+- No codebase research would help clarify this issue
 - Recommend closing with explanation
 
-**REDIRECT** - Issue belongs elsewhere
+**REDIRECT** - Issue belongs elsewhere (pipeline HALTS)
 - Questions → Discussions or support channels
 - Feature requests → Feature request system
 - Security issues → Security reporting channel
+
+**IMPORTANT:** Only CLOSE and REDIRECT halt the pipeline. NEEDS_MORE_INFO and REQUEST_APPROVAL continue - the subsequent agents (Detective, Archaeologist) will enhance the requirements through codebase research.
 
 ## Output Format
 
@@ -183,11 +185,19 @@ Provide your analysis in this EXACT format:
 **Next Steps:**
 [What should happen next - be specific]
 
-**If NEEDS_MORE_INFO:**
-- [List specific questions to ask the reporter]
+## Investigation Notes for Detective (CRITICAL for NEEDS_MORE_INFO)
 
-**If REQUEST_APPROVAL:**
-- [Who should approve this and why]
+**What the user likely wants:**
+[Your interpretation of what they're asking for based on context]
+
+**Questions the Detective should answer through code research:**
+1. [What files/components are involved?]
+2. [What is the current behavior?]
+3. [What would a reasonable implementation look like?]
+
+**Suggested search terms/patterns:**
+- [Search term 1] - to find [what]
+- [Search term 2] - to find [what]
 
 **If CLOSE:**
 - [Exact message to post when closing]

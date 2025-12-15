@@ -888,7 +888,7 @@ export class Orchestrator {
 
   /**
    * Check if pipeline should halt based on agent consensus
-   * Halts on REDIRECT/INVALID intake decisions, continues otherwise
+   * Only halts on REDIRECT/INVALID/CLOSE - other decisions continue with enrichment
    */
   private async checkForEarlyTermination(taskState: TaskState, currentStageIndex: number): Promise<boolean> {
     if (currentStageIndex === 0) {
@@ -900,13 +900,41 @@ export class Orchestrator {
         decision: intakeDecision
       });
 
-      // Halt pipeline on REDIRECT or INVALID decisions
+      // REDIRECT, INVALID, and CLOSE halt the pipeline
       if (intakeDecision === 'REDIRECT' || intakeDecision === 'INVALID') {
         logger.info('Halting pipeline due to intake decision', {
           taskId: taskState.taskId,
           decision: intakeDecision
         });
         return true;
+      } else if (intakeDecision === 'CLOSE') {
+        logger.info('Halting pipeline - issue should be closed', {
+          taskId: taskState.taskId,
+          decision: intakeDecision
+        });
+        await this.autoCloseIssue(taskState, 'Intake agent determined this issue should be closed');
+        return true;
+      }
+
+      // PROCEED, NEEDS_MORE_INFO, REQUEST_APPROVAL all continue
+      // The subsequent agents (Detective, Archaeologist) will enhance/enrich the requirements
+      if (intakeDecision === 'NEEDS_MORE_INFO') {
+        logger.info('Requirements incomplete - Detective/Archaeologist will enhance', {
+          taskId: taskState.taskId,
+          decision: intakeDecision
+        });
+        // Continue - Detective will research and fill gaps
+      } else if (intakeDecision === 'REQUEST_APPROVAL') {
+        logger.info('Feature needs approval - continuing with analysis', {
+          taskId: taskState.taskId,
+          decision: intakeDecision
+        });
+        // Continue - full analysis helps approval decision
+      } else {
+        logger.info('Intake approved, continuing pipeline', {
+          taskId: taskState.taskId,
+          decision: intakeDecision
+        });
       }
 
       // Check for issue decomposition (if enabled)
@@ -1153,6 +1181,47 @@ export class Orchestrator {
       logger.info('Requested more information', { taskId: taskState.taskId });
     } catch (error: any) {
       logger.error('Failed to request more info', { taskId: taskState.taskId, error: error.message });
+    }
+  }
+
+  /**
+   * Request feature approval from stakeholders
+   */
+  private async requestFeatureApproval(taskState: TaskState): Promise<void> {
+    try {
+      const intakeOutput = taskState.stages[0].output || '';
+
+      // Extract who should approve from intake analysis
+      const approverMatch = intakeOutput.match(/\*\*Who Should Approve:\*\*\s*\n([\s\S]*?)(?=\n##|\n\*\*|$)/i);
+      const approver = approverMatch ? approverMatch[1].trim() : 'Product/engineering leadership';
+
+      const comment = `⏸️ **Feature Request - Approval Required**\n\n` +
+        `This feature request has been analyzed by the Intake agent and requires stakeholder approval before proceeding.\n\n` +
+        `**Who Should Approve:**\n${approver}\n\n` +
+        `**To approve and proceed:**\n` +
+        `- Add the \`approved\` label to this issue\n` +
+        `- The AI team will automatically continue processing\n\n` +
+        `**To decline:**\n` +
+        `- Close this issue with a comment explaining why\n\n` +
+        `_This issue is paused until a human decision is made._`;
+
+      await this.githubClient.addComment(taskState.issueNumber, comment);
+      await this.githubClient.addLabel(taskState.issueNumber, 'pending-approval');
+      await this.githubClient.removeLabel(taskState.issueNumber, 'in-progress');
+
+      // Discord notification
+      if (this.discordClient) {
+        await this.discordClient.notifyAwaitingApproval(
+          taskState.issueNumber,
+          taskState.issueTitle,
+          taskState.issueUrl,
+          'feature'
+        );
+      }
+
+      logger.info('Requested feature approval', { taskId: taskState.taskId });
+    } catch (error: any) {
+      logger.error('Failed to request feature approval', { taskId: taskState.taskId, error: error.message });
     }
   }
 

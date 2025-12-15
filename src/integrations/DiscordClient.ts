@@ -184,21 +184,28 @@ export class DiscordClient {
     issueNumber: number,
     issueTitle: string,
     prUrl: string,
-    approvalType: 'merge' | 'closure'
+    approvalType: 'merge' | 'closure' | 'feature'
   ): Promise<boolean> {
-    const title = approvalType === 'merge'
-      ? 'PR Ready for Review'
-      : 'Ready for Closure';
+    const titleMap = {
+      merge: 'PR Ready for Review',
+      closure: 'Ready for Closure',
+      feature: 'Feature Approval Required'
+    };
+    const actionMap = {
+      merge: 'review and merge',
+      closure: 'approve closure',
+      feature: 'approve or decline this feature request'
+    };
 
     return this.sendMessage({
       embeds: [{
-        title,
+        title: titleMap[approvalType],
         description: issueTitle,
         color: DiscordClient.COLORS.WARNING,
         fields: [
           { name: 'Issue', value: `#${issueNumber}`, inline: true },
-          { name: 'Pull Request', value: prUrl, inline: true },
-          { name: 'Action Required', value: `Please review and ${approvalType === 'merge' ? 'merge' : 'approve closure'}`, inline: false },
+          { name: approvalType === 'feature' ? 'Issue' : 'Pull Request', value: prUrl, inline: true },
+          { name: 'Action Required', value: `Please ${actionMap[approvalType]}`, inline: false },
         ],
         timestamp: new Date().toISOString(),
       }],
